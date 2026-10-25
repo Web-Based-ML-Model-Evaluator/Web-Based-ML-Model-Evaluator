@@ -1,0 +1,113 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Web Based ML Model Evaluator - Unified API Contract",
+  "version": "1.0.0",
+  "description": "Standardized REST API contract across Portion 1 (Sneha Ajith), Portion 2 (Satvik Phadke), and Portion 3 (Shreya Patil)",
+  "services": {
+    "portion1_data_ingestion_preprocessing": {
+      "port": 8001,
+      "owner": "Sneha Ajith (PES2UG24CS480)",
+      "endpoints": [
+        {
+          "method": "POST",
+          "path": "/api/v1/datasets/upload",
+          "summary": "Upload raw CSV dataset (<10MB)",
+          "consumes": "multipart/form-data",
+          "produces": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/datasets/{dataset_id}/preview",
+          "summary": "Retrieve 5-row preview, missing value counts, and data types",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/datasets/{dataset_id}/preprocess",
+          "summary": "Clean and impute missing values",
+          "consumes": "application/json",
+          "produces": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/datasets/{dataset_id}/data",
+          "summary": "Internal API: Retrieve cleaned dataset records",
+          "produces": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/datasets/{dataset_id}/schema",
+          "summary": "Internal API: Retrieve column names and data types",
+          "produces": "application/json"
+        }
+      ]
+    },
+    "portion2_task_routing_configuration": {
+      "port": 8002,
+      "owner": "Satvik Phadke (PES2UG24CS450)",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/v1/config/tasks",
+          "summary": "List supported ML task types and valid algorithms",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/config/validate",
+          "summary": "Validate user configuration against dataset schema",
+          "consumes": "application/json",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/pipeline/dispatch",
+          "summary": "Orchestrate pipeline: fetch cleaned data and forward to Portion 3",
+          "consumes": "application/json",
+          "produces": "application/json"
+        }
+      ]
+    },
+    "portion3_model_execution_evaluation": {
+      "port": 8003,
+      "owner": "Shreya Patil (PES2UG24CS484)",
+      "endpoints": [
+        {
+          "method": "GET",
+          "path": "/api/v1/models/supported",
+          "summary": "List supported ML algorithms and their parameter requirements",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/models/execute",
+          "summary": "Fit model, calculate metrics, and generate 2D PCA plots",
+          "consumes": "application/json",
+          "produces": "application/json"
+        },
+        {
+          "method": "GET",
+          "path": "/api/v1/models/comparison/{session_id}",
+          "summary": "Retrieve side-by-side comparison of trained models",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/models/compare",
+          "summary": "Compare specific model execution runs",
+          "consumes": "application/json",
+          "produces": "application/json"
+        }
+      ]
+    }
+  },
+  "standard_error_format": {
+    "error": {
+      "code": "STRING",
+      "message": "Human readable description",
+      "module": "STRING (e.g. portion1_data_ingestion_preprocessing)",
+      "details": "OBJECT / MAP",
+      "timestamp": "ISO-8601 STRING"
+    }
+  }
+}

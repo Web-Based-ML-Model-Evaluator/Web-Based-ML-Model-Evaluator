@@ -1,0 +1,20 @@
+{
+  "execution_id": "run-uuid-001",
+  "dataset_id": "mock-dataset-uuid-001",
+  "task_type": "Classification",
+  "algorithm": "Random Forest Classifier",
+  "train_time_ms": 142.5,
+  "metrics": {
+    "accuracy": 0.95,
+    "precision": 0.94,
+    "recall": 0.95,
+    "f1_score": 0.945,
+    "confusion_matrix": [
+      [7, 0, 0],
+      [0, 6, 1],
+      [0, 0, 6]
+    ],
+    "class_labels": ["setosa", "versicolor", "virginica"]
+  },
+  "created_at": "2026-10-25T11:30:00Z"
+}

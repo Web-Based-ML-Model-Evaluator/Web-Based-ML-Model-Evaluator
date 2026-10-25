@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "portion1_data_ingestion_preprocessing",
+    "portion2_task_routing_configuration",
+    "portion3_model_execution_evaluation",
+]
+resolver = "2"

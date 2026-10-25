@@ -1,0 +1,25 @@
+{
+  "name": "web-based-ml-model-evaluator",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Team 13 - Web Based ML Model Evaluator: 3-Tier Decoupled Architecture (Rust Backend + TSX Frontend)",
+  "scripts": {
+    "start:portion1": "cargo run --bin portion1_data_ingestion_preprocessing",
+    "start:portion2": "cargo run --bin portion2_task_routing_configuration",
+    "start:portion3": "cargo run --bin portion3_model_execution_evaluation",
+    "test:rust": "cargo test --workspace",
+    "test:portion1": "cargo test -p portion1_data_ingestion_preprocessing",
+    "test:portion2": "cargo test -p portion2_task_routing_configuration",
+    "test:portion3": "cargo test -p portion3_model_execution_evaluation"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "lucide-react": "^0.300.0"
+  }
+}
