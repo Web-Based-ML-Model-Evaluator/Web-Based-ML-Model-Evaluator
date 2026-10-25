@@ -44,11 +44,11 @@ pub fn compute_classification_metrics(
 
     ClassificationMetrics {
         accuracy,
-        precision: 0.0,
-        recall: 0.0,
-        f1_score: 0.0,
-        confusion_matrix: vec![],
-        class_labels: vec![],
+        precision: p_sum / n,
+        recall: r_sum / n,
+        f1_score: f_sum / n,
+        confusion_matrix: cm,
+        class_labels,
     }
 }
 
