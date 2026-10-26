@@ -15,3 +15,4 @@ chrono = { version = "0.4", features = ["serde"] }
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 tracing = "0.1"
 tracing-subscriber = "0.3"
+smartcore = "0.6"
