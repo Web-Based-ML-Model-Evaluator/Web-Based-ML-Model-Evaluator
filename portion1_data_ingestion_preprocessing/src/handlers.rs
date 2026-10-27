@@ -45,14 +45,19 @@ pub async fn upload_dataset(
                 filename = f_name.to_string();
             }
             let data = field.bytes().await.map_err(|e| {
-                (
-                    StatusCode::BAD_REQUEST,
-                    Json(StandardErrorResponse::new(
+                let status = e.status();
+                let (code, message) = if status == StatusCode::PAYLOAD_TOO_LARGE {
+                    (
+                        "FILE_TOO_LARGE",
+                        "Uploaded file exceeds the maximum allowed limit of 10 MB.".to_string(),
+                    )
+                } else {
+                    (
                         "UPLOAD_READ_FAILED",
-                        &format!("Failed to read multipart file stream: {}", e),
-                        None,
-                    )),
-                )
+                        format!("Failed to read multipart file stream: {}", e),
+                    )
+                };
+                (status, Json(StandardErrorResponse::new(code, &message, None)))
             })?;
             file_bytes = Some(data.to_vec());
             break;

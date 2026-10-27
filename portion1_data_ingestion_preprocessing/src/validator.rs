@@ -2,19 +2,12 @@ use crate::models::StandardErrorResponse;
 
 pub const MAX_FILE_SIZE_BYTES: usize = 10 * 1024 * 1024; // 10 MB (NFR-4)
 
-/// Validates CSV upload (File format, size limit, UTF-8 encoding)
-///
-/// TODO: Assigned to Sneha Ajith (PES2UG24CS480)
-/// Requirements:
-/// - Enforce maximum 10MB file limit (NFR-4) -> Return "FILE_TOO_LARGE" (413)
-/// - Validate .csv file extension -> Return "INVALID_FILE_FORMAT" (400)
-/// - Validate non-empty file -> Return "EMPTY_FILE" (400)
-/// - Validate UTF-8 character encoding -> Return "INVALID_ENCODING" (400)
+/// Validates CSV upload (size limit, file format, empty file, UTF-8 encoding)
 pub fn validate_csv_upload(
-    _filename: &str,
+    filename: &str,
     bytes: &[u8],
 ) -> Result<(), StandardErrorResponse> {
-    // 1. Check file size restriction (NFR-4)
+    // 1. File size limit (NFR-4) -> 413
     if bytes.len() > MAX_FILE_SIZE_BYTES {
         return Err(StandardErrorResponse::new(
             "FILE_TOO_LARGE",
@@ -29,20 +22,29 @@ pub fn validate_csv_upload(
         ));
     }
 
-    // 2. Check file format (.csv extension)
-    if !_filename.is_empty() && !_filename.to_lowercase().ends_with(".csv") {
+    // 2. File extension must be .csv -> 400
+    if !filename.to_lowercase().ends_with(".csv") {
         return Err(StandardErrorResponse::new(
             "INVALID_FILE_FORMAT",
-            &format!("File '{}' is not a supported format. Please upload a valid .csv file.", _filename),
-            Some(serde_json::json!({ "received_filename": _filename })),
+            &format!("'{}' is not a CSV file. Only .csv files are accepted.", filename),
+            Some(serde_json::json!({ "filename": filename })),
         ));
     }
 
-    // 3. Check for empty file
-    if bytes.is_empty() {
+    // 3. File must not be empty (or only whitespace) -> 400
+    if bytes.iter().all(|b| b.is_ascii_whitespace()) {
         return Err(StandardErrorResponse::new(
             "EMPTY_FILE",
-            "The uploaded CSV file is empty.",
+            "The uploaded file is empty.",
+            None,
+        ));
+    }
+
+    // 4. File must be valid UTF-8 text -> 400
+    if std::str::from_utf8(bytes).is_err() {
+        return Err(StandardErrorResponse::new(
+            "INVALID_ENCODING",
+            "The file is not valid UTF-8 text. Please save it as 'CSV UTF-8' and try again.",
             None,
         ));
     }
@@ -51,47 +53,36 @@ pub fn validate_csv_upload(
 }
 
 #[cfg(test)]
-mod validator_tests {
+mod tests {
     use super::*;
 
     #[test]
-    fn test_valid_csv_upload() {
-        let csv_content = b"a,b,c\n1,2,3";
-        let res = validate_csv_upload("dataset.csv", csv_content);
-        assert!(res.is_ok());
+    fn accepts_valid_csv() {
+        assert!(validate_csv_upload("data.csv", b"a,b\n1,2\n").is_ok());
     }
 
     #[test]
-    fn test_file_size_exceeds_10mb_rejected() {
-        // Enforces NFR-4: Restrict file uploads to maximum 10 MB limit
-        let oversized = vec![0u8; MAX_FILE_SIZE_BYTES + 1];
-        let res = validate_csv_upload("big_data.csv", &oversized);
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert_eq!(err.error.code, "FILE_TOO_LARGE");
+    fn rejects_non_csv_extension() {
+        let e = validate_csv_upload("data.xlsx", b"a,b\n1,2\n").unwrap_err();
+        assert_eq!(e.error.code, "INVALID_FILE_FORMAT");
     }
 
     #[test]
-    fn test_file_size_within_10mb_accepted() {
-        // 1MB file is within 10MB limit
-        let normal_size = vec![b'a'; 1024 * 1024];
-        let res = validate_csv_upload("normal_data.csv", &normal_size);
-        assert!(res.is_ok());
+    fn rejects_empty_file() {
+        let e = validate_csv_upload("data.csv", b"").unwrap_err();
+        assert_eq!(e.error.code, "EMPTY_FILE");
     }
 
     #[test]
-    fn test_invalid_extension_rejected() {
-        let res = validate_csv_upload("data.xlsx", b"some data");
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert_eq!(err.error.code, "INVALID_FILE_FORMAT");
+    fn rejects_file_over_10mb() {
+        let big = vec![b'a'; MAX_FILE_SIZE_BYTES + 1];
+        let e = validate_csv_upload("data.csv", &big).unwrap_err();
+        assert_eq!(e.error.code, "FILE_TOO_LARGE");
     }
 
     #[test]
-    fn test_empty_file_rejected() {
-        let res = validate_csv_upload("data.csv", b"");
-        assert!(res.is_err());
-        let err = res.unwrap_err();
-        assert_eq!(err.error.code, "EMPTY_FILE");
+    fn rejects_invalid_utf8() {
+        let e = validate_csv_upload("data.csv", &[0xff, 0xfe, 0xfa]).unwrap_err();
+        assert_eq!(e.error.code, "INVALID_ENCODING");
     }
 }
