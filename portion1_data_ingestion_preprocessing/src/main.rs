@@ -12,7 +12,9 @@ use handlers::{
     AppState,
 };
 use std::net::SocketAddr;
+use axum::extract::DefaultBodyLimit;
 use tower_http::cors::{Any, CorsLayer};
+use validator::MAX_FILE_SIZE_BYTES;
 
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
@@ -27,6 +29,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/datasets/:dataset_id/preprocess", post(preprocess_dataset))
         .route("/api/v1/datasets/:dataset_id/data", get(get_cleaned_data))
         .route("/api/v1/datasets/:dataset_id/schema", get(get_schema))
+        .layer(DefaultBodyLimit::max(MAX_FILE_SIZE_BYTES)) // Enforces 10MB file size limit (NFR-4)
         .layer(cors)
         .with_state(state)
 }

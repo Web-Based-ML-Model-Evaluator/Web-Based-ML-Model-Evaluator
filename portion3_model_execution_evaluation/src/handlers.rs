@@ -242,6 +242,25 @@ pub async fn execute_model(
     };
 
     let elapsed_ms = (start_time.elapsed().as_secs_f64() * 1000.0 * 10.0).round() / 10.0;
+
+    // Enforce 30-second pipeline latency constraint (PR-1, PR-2, NFR-1)
+    if start_time.elapsed().as_secs() >= 30 {
+        return Err((
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(StandardErrorResponse::new(
+                "PIPELINE_LATENCY_EXCEEDED",
+                &format!(
+                    "Model execution exceeded the 30-second latency budget (took {:.2}s, limit 30s) per PR-1, PR-2, and NFR-1.",
+                    start_time.elapsed().as_secs_f64()
+                ),
+                Some(serde_json::json!({
+                    "elapsed_ms": elapsed_ms,
+                    "max_allowed_seconds": 30
+                })),
+            )),
+        ));
+    }
+
     let mut final_comp_entry = comparison_entry;
     final_comp_entry.train_time_ms = elapsed_ms;
 

@@ -74,22 +74,61 @@ fn sorted_labels(pairs: &[(&String, &String)]) -> Vec<String> {
 
 /// Computes Regression Metrics: MAE, MSE, RMSE, and R2 Score
 ///
-/// TODO: Assigned to Shreya Patil (PES2UG24CS484)
-/// Requirements (FR-10):
-/// - Mean Absolute Error (MAE)
-/// - Mean Squared Error (MSE)
-/// - Root Mean Squared Error (RMSE)
-/// - R2 Score (Coefficient of Determination)
+/// Implemented for Issue 8 (FR-10):
+/// - Mean Absolute Error (MAE): (1/n) * sum(|actual - predicted|)
+/// - Mean Squared Error (MSE): (1/n) * sum((actual - predicted)^2)
+/// - Root Mean Squared Error (RMSE): sqrt(MSE)
+/// - R2 Score (Coefficient of Determination): 1 - (SS_res / SS_tot)
 pub fn compute_regression_metrics(
-    _actual: &[f64],
-    _predicted: &[f64],
+    actual: &[f64],
+    predicted: &[f64],
 ) -> RegressionMetrics {
-    // SKELETON PLACEHOLDER: Shreya to implement regression metric calculations
+    let n = actual.len().min(predicted.len());
+    if n == 0 {
+        return RegressionMetrics {
+            mean_absolute_error: 0.0,
+            mean_squared_error: 0.0,
+            root_mean_squared_error: 0.0,
+            r2_score: 0.0,
+        };
+    }
+
+    let mut sum_abs_err = 0.0;
+    let mut sum_sq_err = 0.0;
+    let mut actual_sum = 0.0;
+
+    for i in 0..n {
+        let diff = actual[i] - predicted[i];
+        sum_abs_err += diff.abs();
+        sum_sq_err += diff * diff;
+        actual_sum += actual[i];
+    }
+
+    let mae = sum_abs_err / n as f64;
+    let mse = sum_sq_err / n as f64;
+    let rmse = mse.sqrt();
+
+    let mean_actual = actual_sum / n as f64;
+    let mut ss_tot = 0.0;
+    for &y in &actual[..n] {
+        let diff = y - mean_actual;
+        ss_tot += diff * diff;
+    }
+
+    let r2 = if ss_tot > 1e-12 {
+        1.0 - (sum_sq_err / ss_tot)
+    } else if sum_sq_err < 1e-12 {
+        // Perfect prediction on constant data
+        1.0
+    } else {
+        0.0
+    };
+
     RegressionMetrics {
-        mean_absolute_error: 0.0,
-        mean_squared_error: 0.0,
-        root_mean_squared_error: 0.0,
-        r2_score: 0.0,
+        mean_absolute_error: (mae * 10000.0).round() / 10000.0,
+        mean_squared_error: (mse * 10000.0).round() / 10000.0,
+        root_mean_squared_error: (rmse * 10000.0).round() / 10000.0,
+        r2_score: (r2 * 10000.0).round() / 10000.0,
     }
 }
 
@@ -189,5 +228,59 @@ mod classification_tests {
         close(m.accuracy, 0.0);
         assert!(m.confusion_matrix.is_empty() && m.class_labels.is_empty());
         assert!(m.f1_score.is_finite());
+    }
+}
+
+#[cfg(test)]
+mod regression_tests {
+    use super::*;
+
+    fn close(a: f64, b: f64) {
+        assert!((a - b).abs() < 1e-3, "{a} != {b}");
+    }
+
+    #[test]
+    fn test_regression_known_values() {
+        let actual = vec![3.0, -0.5, 2.0, 7.0];
+        let predicted = vec![2.5, 0.0, 2.0, 8.0];
+        let m = compute_regression_metrics(&actual, &predicted);
+
+        // MAE: (|0.5| + |-0.5| + |0.0| + |-1.0|) / 4 = 0.5
+        close(m.mean_absolute_error, 0.5);
+        // MSE: (0.25 + 0.25 + 0.0 + 1.0) / 4 = 0.375
+        close(m.mean_squared_error, 0.375);
+        // RMSE: sqrt(0.375) ≈ 0.6124
+        close(m.root_mean_squared_error, 0.6124);
+        // R2: 1 - (1.5 / 29.1875) ≈ 0.9486
+        close(m.r2_score, 0.9486);
+    }
+
+    #[test]
+    fn test_regression_perfect_predictions() {
+        let actual = vec![10.0, 20.0, 30.0, 40.0];
+        let predicted = vec![10.0, 20.0, 30.0, 40.0];
+        let m = compute_regression_metrics(&actual, &predicted);
+
+        close(m.mean_absolute_error, 0.0);
+        close(m.mean_squared_error, 0.0);
+        close(m.root_mean_squared_error, 0.0);
+        close(m.r2_score, 1.0);
+    }
+
+    #[test]
+    fn test_regression_empty() {
+        let m = compute_regression_metrics(&[], &[]);
+        assert_eq!(m.mean_absolute_error, 0.0);
+        assert_eq!(m.mean_squared_error, 0.0);
+        assert_eq!(m.root_mean_squared_error, 0.0);
+        assert_eq!(m.r2_score, 0.0);
+    }
+
+    #[test]
+    fn test_regression_constant_target() {
+        let actual = vec![5.0, 5.0, 5.0];
+        let predicted = vec![5.0, 5.0, 5.0];
+        let m = compute_regression_metrics(&actual, &predicted);
+        close(m.r2_score, 1.0);
     }
 }
