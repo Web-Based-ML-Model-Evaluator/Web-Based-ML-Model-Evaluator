@@ -38,11 +38,25 @@ pub fn validate_task_config(
     _available_columns: Option<&Vec<String>>,
     _column_types: Option<&HashMap<String, String>>,
 ) -> ValidationResult {
-    // SKELETON PLACEHOLDER: Satvik to implement validation rules
-    let errors = Vec::new();
+    let mut errors = Vec::new();
     let warnings = Vec::new();
 
-    // TODO: Satvik Phadke - Implement validation checks here
+    // FR-4: Validate the selected algorithm.
+    let supported_algorithms = get_supported_algorithms(&config.task_type);
+
+    if !supported_algorithms.contains(&config.algorithm.as_str()) {
+        errors.push(format!(
+            "Algorithm '{}' is not supported for task type '{:?}'.",
+            config.algorithm, config.task_type
+        ));
+    }
+
+    // Determine status before moving errors into ValidationResult.
+    let status = if errors.is_empty() {
+        "VALID"
+    } else {
+        "INVALID"
+    };
 
     ValidationResult {
         is_valid: errors.is_empty(),
@@ -53,7 +67,44 @@ pub fn validate_task_config(
             "algorithm": config.algorithm,
             "target": config.target_column,
             "features_count": config.feature_columns.len(),
-            "status": "SKELETON_READY_FOR_IMPLEMENTATION"
+            "status": status
         })),
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn create_config(algorithm: &str) -> TaskConfiguration {
+        TaskConfiguration {
+            dataset_id: "test-dataset".to_string(),
+            task_type: TaskType::Classification,
+            algorithm: algorithm.to_string(),
+            target_column: Some("target".to_string()),
+            feature_columns: vec!["feature1".to_string()],
+            test_split_ratio: Some(0.2),
+            num_clusters: None,
+            random_seed: None,
+        }
+    }
+
+    #[test]
+    fn rejects_unsupported_algorithm() {
+        let config = create_config("Random Forest Regressor");
+
+        let result = validate_task_config(&config, None, None);
+
+        assert!(!result.is_valid);
+        assert!(!result.errors.is_empty());
+    }
+
+    #[test]
+    fn accepts_supported_algorithm() {
+        let config = create_config("Random Forest Classifier");
+
+        let result = validate_task_config(&config, None, None);
+
+        assert!(result.is_valid);
+        assert!(result.errors.is_empty());
     }
 }
