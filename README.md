@@ -10,7 +10,7 @@
 Based on the 4 project specification documents (SRS, Proposal, SASD, and STP), the system is divided into **3 cleanly isolated portions** with dedicated API contracts:
 
 ```
-[Portion 1: Sneha Ajith]            [Portion 2: Satvik Phadke]            [Portion 3: Shreya Patil]
+[Portion 1: Shreya Ajith]            [Portion 2: Satvik Phadke]            [Portion 3: Shreya Patil]
    (:8001 / Rust + TSX)                 (:8002 / Rust + TSX)                 (:8003 / Rust + TSX)
 +-------------------------+          +-------------------------+          +-------------------------+
 | Data Ingestion &        |  REST    | ML Task Routing &       |  REST    | Model Execution,        |
@@ -22,7 +22,7 @@ Based on the 4 project specification documents (SRS, Proposal, SASD, and STP), t
 ### Summary of Portions:
 | Folder | Assigned Teammate | Assigned Requirements | Service Port | Scope & Responsibility Skeleton |
 | :--- | :--- | :--- | :--- | :--- |
-| **`portion1_data_ingestion_preprocessing/`** | **Sneha Ajith** (`PES2UG24CS480`) | **FR-1, FR-2, FR-3, NFR-4** | `8001` | CSV upload, 10MB limit enforcement, dataset summary preview, missing value imputation rules, and cleaned data JSON contract. |
+| **`portion1_data_ingestion_preprocessing/`** | **Shreya Ajith** (`PES2UG24CS480`) | **FR-1, FR-2, FR-3, NFR-4** | `8001` | CSV upload, 10MB limit enforcement, dataset summary preview, missing value imputation rules, and cleaned data JSON contract. |
 | **`portion2_task_routing_configuration/`** | **Satvik Phadke** (`PES2UG24CS450`) | **FR-4, FR-5, FR-6, FR-7, NFR-2** | `8002` | ML problem type selector (Classification, Regression, Clustering), feature/target selectors, train/test split slider, and configuration validation. |
 | **`portion3_model_execution_evaluation/`** | **Shreya Patil** (`PES2UG24CS484`) | **FR-8, FR-9, FR-10, FR-11, FR-12, NFR-1** | `8003` | Model training engine (8 algorithms), classification metrics & confusion matrix, regression metrics, clustering silhouette & 2D PCA plots, and side-by-side comparison dashboard. |
 | **System Architecture & QA** | **Sanyam Devan Hiran** (`PES2UG24CS446`) | **FR-13 (Error Handling), STP, RTM** | All | API contract baselining, cross-module integration tests, error schema enforcement. |
@@ -44,13 +44,13 @@ Based on the 4 project specification documents (SRS, Proposal, SASD, and STP), t
 
 The services communicate over local HTTP REST endpoints:
 
-1. **Sneha's Service (`:8001`)** ingests and cleans the dataset:
+1. **Shreya's Service (`:8001`)** ingests and cleans the dataset:
    - `POST /api/v1/datasets/upload`: Ingests raw CSV and validates `< 10MB`.
    - `POST /api/v1/datasets/{id}/preprocess`: Applies missing value rules and produces cleaned dataset.
    - `GET  /api/v1/datasets/{id}/data`: Exposes cleaned dataset JSON to downstream services.
    - `GET  /api/v1/datasets/{id}/schema`: Exposes column names and inferred data types.
 
-2. **Satvik's Service (`:8002`)** validates user choices against Sneha's schema:
+2. **Satvik's Service (`:8002`)** validates user choices against Shreya's schema:
    - `GET  /api/v1/config/tasks`: Lists supported tasks and permitted algorithms.
    - `POST /api/v1/config/validate`: Validates target variable, feature list, and split ratios.
    - `POST /api/v1/pipeline/dispatch`: Fetches cleaned dataset from Portion 1 (`:8001`) and forwards it with the validated config to Portion 3 (`:8003`).
