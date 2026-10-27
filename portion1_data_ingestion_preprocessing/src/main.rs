@@ -13,7 +13,6 @@ use handlers::{
     AppState,
 };
 use std::net::SocketAddr;
-use axum::extract::DefaultBodyLimit;
 use tower_http::cors::{Any, CorsLayer};
 use validator::MAX_FILE_SIZE_BYTES;
 
