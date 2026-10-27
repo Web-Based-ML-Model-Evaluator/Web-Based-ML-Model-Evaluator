@@ -107,6 +107,7 @@ pub async fn dispatch_pipeline(
     State(state): State<AppState>,
     Json(payload): Json<PipelineDispatchRequest>,
 ) -> Result<Json<PipelineDispatchResponse>, (StatusCode, Json<StandardErrorResponse>)> {
+    let pipeline_start = std::time::Instant::now();
     let config = &payload.config;
 
     // 1. Validate configuration first
@@ -141,6 +142,24 @@ pub async fn dispatch_pipeline(
         .dispatch_to_portion3(config, &cleaned_data)
         .await
         .map_err(|e| (StatusCode::BAD_GATEWAY, Json(e)))?;
+
+    // Enforce 30-second pipeline latency constraint (PR-1, PR-2, NFR-1)
+    if pipeline_start.elapsed().as_secs() >= 30 {
+        return Err((
+            StatusCode::GATEWAY_TIMEOUT,
+            Json(StandardErrorResponse::new(
+                "PIPELINE_LATENCY_EXCEEDED",
+                &format!(
+                    "Pipeline execution exceeded the 30-second latency budget (took {:.2}s, limit 30s) per PR-1, PR-2, and NFR-1.",
+                    pipeline_start.elapsed().as_secs_f64()
+                ),
+                Some(serde_json::json!({
+                    "elapsed_ms": (pipeline_start.elapsed().as_secs_f64() * 1000.0).round(),
+                    "max_allowed_seconds": 30
+                })),
+            )),
+        ));
+    }
 
     Ok(Json(PipelineDispatchResponse {
         dispatch_id: Uuid::new_v4().to_string(),

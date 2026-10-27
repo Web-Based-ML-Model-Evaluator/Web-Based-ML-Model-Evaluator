@@ -7,14 +7,23 @@ import React, { useState } from 'react';
 //        FR-11 (Clustering & 2D PCA), FR-12 (Side-by-Side Model Comparison)
 // ============================================================================
 
+export interface RegressionMetrics {
+  mean_absolute_error: number;
+  mean_squared_error: number;
+  root_mean_squared_error: number;
+  r2_score: number;
+}
+
 export interface EvaluationDashboardProps {
   datasetId?: string;
   apiBaseUrl?: string;
+  regressionMetrics?: RegressionMetrics;
 }
 
 export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   datasetId = 'dataset-001',
   apiBaseUrl = 'http://localhost:8003',
+  regressionMetrics,
 }) => {
   const [activeTab, setActiveTab] = useState<'results' | 'comparison'>('results');
 
@@ -43,13 +52,38 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
 
       {activeTab === 'results' ? (
         <div>
-          {/* SKELETON SECTION 1: Metrics Summary Cards (FR-9, FR-10, FR-11) */}
+          {/* Regression Performance Metrics Display (Issue 8 / FR-10) */}
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3>Step 1: Evaluation Metrics (FR-9, FR-10, FR-11)</h3>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>
-              {/* TODO: Shreya Patil - Render metrics summary cards for Accuracy, F1, MAE, R2, or Silhouette Score */}
-              [TODO: Shreya Patil - Render performance metric summary cards here]
+            <h3>Regression Performance Metrics (FR-10)</h3>
+            <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 16px' }}>
+              Mean Absolute Error (MAE), Mean Squared Error (MSE), Root Mean Squared Error (RMSE), and R² score:
             </p>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
+              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>MEAN ABSOLUTE ERROR (MAE)</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
+                  {regressionMetrics ? regressionMetrics.mean_absolute_error : '--'}
+                </div>
+              </div>
+              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>MEAN SQUARED ERROR (MSE)</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
+                  {regressionMetrics ? regressionMetrics.mean_squared_error : '--'}
+                </div>
+              </div>
+              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>ROOT MEAN SQ ERROR (RMSE)</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
+                  {regressionMetrics ? regressionMetrics.root_mean_squared_error : '--'}
+                </div>
+              </div>
+              <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>R² SCORE</div>
+                <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#16a34a', marginTop: '4px' }}>
+                  {regressionMetrics ? regressionMetrics.r2_score : '--'}
+                </div>
+              </div>
+            </div>
           </section>
 
           {/* SKELETON SECTION 2: Confusion Matrix Grid (FR-9) */}
