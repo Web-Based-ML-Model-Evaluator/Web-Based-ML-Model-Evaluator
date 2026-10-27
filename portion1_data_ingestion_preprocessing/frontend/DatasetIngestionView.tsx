@@ -31,24 +31,70 @@ export interface DatasetIngestionViewProps {
   apiBaseUrl?: string;
 }
 
+const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (NFR-4)
+
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
   onDatasetReady: _onDatasetReady,
   apiBaseUrl = 'http://localhost:8001',
 }) => {
   const [file, setFile] = useState<File | null>(null);
-  const [uploadResult, _setUploadResult] = useState<DatasetUploadResponse | null>(null);
+  const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [uploading, setUploading] = useState(false);
 
-  // TODO: Sneha Ajith - Implement file selection with strict 10MB limit (NFR-4)
+  // FR-1 / NFR-4: validate the chosen file BEFORE sending it to the server
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      setFile(e.target.files[0]);
+    setFile(null);
+    setUploadResult(null);
+    setError(null);
+
+    const chosen = e.target.files?.[0];
+    if (!chosen) return;
+
+    if (!chosen.name.toLowerCase().endsWith('.csv')) {
+      setError('Only .csv files are allowed.');
+      return;
     }
+    if (chosen.size === 0) {
+      setError('The selected file is empty.');
+      return;
+    }
+    if (chosen.size > MAX_FILE_SIZE_BYTES) {
+      setError('File too large. Maximum size is 10 MB.');
+      return;
+    }
+    setFile(chosen);
   };
 
-  // TODO: Sneha Ajith - Implement upload API call to POST /api/v1/datasets/upload (FR-1, FR-2)
+  // FR-1: send the file to POST /api/v1/datasets/upload
   const handleUpload = async () => {
-    console.log('Upload button clicked for:', file?.name);
-    // TODO: Send multipart form-data to `${apiBaseUrl}/api/v1/datasets/upload`
+    if (!file) {
+      setError('Please choose a CSV file first.');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file); // the server expects the key "file"
+
+      const res = await fetch(`${apiBaseUrl}/api/v1/datasets/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+
+      if (!res.ok) {
+        // Server errors look like { error: { code, message, ... } }
+        setError(data?.error?.message ?? 'Upload failed.');
+        return;
+      }
+      setUploadResult(data as DatasetUploadResponse);
+    } catch {
+      setError('Could not reach the server. Is it running on port 8001?');
+    } finally {
+      setUploading(false);
+    }
   };
 
   // TODO: Sneha Ajith - Implement preprocessing API call to POST /api/v1/datasets/{id}/preprocess (FR-3)
@@ -66,16 +112,43 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
         </p>
       </header>
 
-      {/* SKELETON SECTION 1: File Upload Dropzone (FR-1, NFR-4) */}
+      {/* SECTION 1: File Upload Dropzone (FR-1, NFR-4) */}
       <section style={{ padding: '24px', border: '2px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', marginBottom: '24px' }}>
         <h3>Step 1: Dataset Upload (FR-1)</h3>
         <p style={{ color: '#64748b', fontSize: '14px' }}>Select a CSV dataset under 10 MB (NFR-4)</p>
         <input type="file" accept=".csv" onChange={handleFileChange} />
+
+        {file && (
+          <p style={{ fontSize: '14px' }}>
+            Selected: <strong>{file.name}</strong> ({(file.size / 1024 / 1024).toFixed(2)} MB)
+          </p>
+        )}
+
         <div style={{ marginTop: '16px' }}>
-          <button onClick={handleUpload} style={{ padding: '8px 20px', backgroundColor: '#2563eb', color: '#fff', border: 'none', borderRadius: '6px' }}>
-            Upload CSV
+          <button
+            onClick={handleUpload}
+            disabled={!file || uploading}
+            style={{
+              padding: '8px 20px',
+              backgroundColor: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              opacity: !file || uploading ? 0.6 : 1,
+              cursor: !file || uploading ? 'not-allowed' : 'pointer',
+            }}
+          >
+            {uploading ? 'Uploading...' : 'Upload CSV'}
           </button>
         </div>
+
+        {error && <p style={{ color: '#dc2626', marginTop: '12px' }}>{error}</p>}
+
+        {uploadResult && (
+          <p style={{ color: '#059669', marginTop: '12px' }}>
+            Uploaded <strong>{uploadResult.filename}</strong> successfully. Dataset ID: {uploadResult.dataset_id}
+          </p>
+        )}
       </section>
 
       {/* SKELETON SECTION 2: Dataset Summary & 5-Row Preview (FR-2) */}
