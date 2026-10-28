@@ -749,6 +749,92 @@ mod supervised_tests {
     }
 
     #[cfg(test)]
+    mod pca_projection_tests {
+        use super::*;
+
+        fn close(actual: f64, expected: f64) {
+            assert!(
+                (actual - expected).abs() < 1e-9,
+                "{actual} != {expected}"
+            );
+        }
+
+        #[test]
+        fn projects_onto_the_two_principal_axes_in_descending_variance_order() {
+            let features = vec![
+                vec![-2.0, 0.0],
+                vec![2.0, 0.0],
+                vec![0.0, -1.0],
+                vec![0.0, 1.0],
+            ];
+            let assignments = vec![3, 2, 1, 0];
+
+            let points = try_project_pca_2d(&features, &assignments).unwrap();
+
+            assert_eq!(points.len(), features.len());
+            for (index, point) in points.iter().enumerate() {
+                assert_eq!(point.sample_id, index);
+                assert_eq!(point.cluster, assignments[index]);
+            }
+            for (point, (expected_x, expected_y)) in points
+                .iter()
+                .zip([(-2.0, 0.0), (2.0, 0.0), (0.0, -1.0), (0.0, 1.0)])
+            {
+                close(point.x, expected_x);
+                close(point.y, expected_y);
+            }
+        }
+
+        #[test]
+        fn two_components_preserve_rank_two_data_from_more_than_two_features() {
+            let features = vec![
+                vec![-2.0, -1.0, -3.0],
+                vec![-1.0, 2.0, 1.0],
+                vec![1.0, -2.0, -1.0],
+                vec![2.0, 1.0, 3.0],
+            ];
+            let assignments = vec![0, 1, 1, 0];
+            let points = try_project_pca_2d(&features, &assignments).unwrap();
+
+            let projected_sum_squares = points
+                .iter()
+                .map(|point| point.x.powi(2) + point.y.powi(2))
+                .sum::<f64>();
+            let centered_sum_squares = features
+                .iter()
+                .map(|row| row.iter().map(|value| value.powi(2)).sum::<f64>())
+                .sum::<f64>();
+
+            assert_eq!(
+                points.iter().map(|point| point.cluster).collect::<Vec<_>>(),
+                assignments
+            );
+            close(projected_sum_squares, centered_sum_squares);
+        }
+
+        #[test]
+        fn projection_is_repeatable() {
+            let features = vec![
+                vec![0.0, 2.0, 1.0],
+                vec![1.0, 0.0, -1.0],
+                vec![3.0, 1.0, 2.0],
+                vec![4.0, 5.0, 0.0],
+            ];
+            let assignments = vec![2, 0, 2, 1];
+
+            let first = try_project_pca_2d(&features, &assignments).unwrap();
+            let second = try_project_pca_2d(&features, &assignments).unwrap();
+
+            for (left, right) in first.iter().zip(second) {
+                assert_eq!(left.sample_id, right.sample_id);
+                assert_eq!(left.cluster, right.cluster);
+                close(left.x, right.x);
+                close(left.y, right.y);
+            }
+        }
+    }
+
+    #[cfg(test)]
     mod kmeans_tests {
         use super::*;
 
