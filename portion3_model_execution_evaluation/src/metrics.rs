@@ -1,4 +1,5 @@
 use crate::models::{ClassificationMetrics, ClusteringMetrics, PcaScatterPoint, RegressionMetrics};
+use crate::ml_algorithms::MlError;
 use std::collections::HashMap;
 
 /// Computes Classification Metrics: Accuracy, Precision, Recall, F1, and Confusion Matrix
@@ -132,32 +133,197 @@ pub fn compute_regression_metrics(
     }
 }
 
-/// Computes Clustering Metrics: Silhouette Score, Davies-Bouldin Index, and Cluster Distribution
-///
-/// TODO: Assigned to Shreya Patil (PES2UG24CS484)
-/// Requirements (FR-11):
-/// - Silhouette Score (intra-cluster distance a vs nearest-cluster distance b)
-/// - Davies-Bouldin Index
-/// - Cluster distribution counts
+fn euclidean_distance(left: &[f64], right: &[f64]) -> f64 {
+    left.iter()
+        .zip(right)
+        .fold(0.0_f64, |distance, (a, b)| distance.hypot(a - b))
+}
+
+fn silhouette_score(features: &[Vec<f64>], assignments: &[usize]) -> f64 {
+    let mut clusters: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (sample, &cluster) in assignments.iter().enumerate() {
+        clusters.entry(cluster).or_default().push(sample);
+    }
+    if clusters.len() < 2 {
+        return 0.0;
+    }
+
+    assignments
+        .iter()
+        .enumerate()
+        .map(|(sample, own_cluster)| {
+            let own_members = &clusters[own_cluster];
+            if own_members.len() < 2 {
+                return 0.0;
+            }
+            let within = own_members
+                .iter()
+                .filter(|&&other| other != sample)
+                .map(|&other| euclidean_distance(&features[sample], &features[other]))
+                .sum::<f64>()
+                / (own_members.len() - 1) as f64;
+            let nearest_other = clusters
+                .iter()
+                .filter(|(cluster, _)| *cluster != own_cluster)
+                .map(|(_, members)| {
+                    members
+                        .iter()
+                        .map(|&other| euclidean_distance(&features[sample], &features[other]))
+                        .sum::<f64>()
+                        / members.len() as f64
+                })
+                .fold(f64::INFINITY, f64::min);
+            let denominator = within.max(nearest_other);
+            if denominator.is_finite() && denominator > 0.0 {
+                (nearest_other - within) / denominator
+            } else {
+                0.0
+            }
+        })
+        .sum::<f64>()
+        / assignments.len() as f64
+}
+
+fn davies_bouldin_index(features: &[Vec<f64>], assignments: &[usize]) -> f64 {
+    let mut clusters: HashMap<usize, Vec<usize>> = HashMap::new();
+    for (sample, &cluster) in assignments.iter().enumerate() {
+        clusters.entry(cluster).or_default().push(sample);
+    }
+    if clusters.len() < 2 {
+        return 0.0;
+    }
+
+    let centroids: HashMap<usize, Vec<f64>> = clusters
+        .iter()
+        .map(|(&cluster, members)| {
+            let mut centroid = vec![0.0; features[0].len()];
+            for &sample in members {
+                for (coordinate, value) in centroid.iter_mut().zip(&features[sample]) {
+                    *coordinate += value;
+                }
+            }
+            for coordinate in &mut centroid {
+                *coordinate /= members.len() as f64;
+            }
+            (cluster, centroid)
+        })
+        .collect();
+    let scatter: HashMap<usize, f64> = clusters
+        .iter()
+        .map(|(&cluster, members)| {
+            let mean_distance = members
+                .iter()
+                .map(|&sample| euclidean_distance(&features[sample], &centroids[&cluster]))
+                .sum::<f64>()
+                / members.len() as f64;
+            (cluster, mean_distance)
+        })
+        .collect();
+
+    let sum_max_ratios = clusters
+        .keys()
+        .map(|&cluster| {
+            clusters
+                .keys()
+                .filter(|&&other| other != cluster)
+                .map(|&other| {
+                    let centroid_distance =
+                        euclidean_distance(&centroids[&cluster], &centroids[&other]);
+                    let combined_scatter = scatter[&cluster] + scatter[&other];
+                    if centroid_distance > 0.0 {
+                        combined_scatter / centroid_distance
+                    } else if combined_scatter > 0.0 {
+                        f64::MAX
+                    } else {
+                        0.0
+                    }
+                })
+                .fold(0.0_f64, f64::max)
+        })
+        .sum::<f64>();
+    sum_max_ratios / clusters.len() as f64
+}
+
+/// Computes Euclidean silhouette and Davies-Bouldin scores plus cluster counts.
 pub fn compute_clustering_metrics(
-    _features: &[Vec<f64>],
+    features: &[Vec<f64>],
     assignments: &[usize],
     k: usize,
     pca_data: Vec<PcaScatterPoint>,
 ) -> ClusteringMetrics {
-    // SKELETON PLACEHOLDER: Shreya to implement clustering metric calculations
-    let mut cluster_counts: HashMap<usize, usize> = HashMap::new();
+    try_compute_clustering_metrics(features, assignments, k, pca_data)
+        .unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Fallible clustering metrics calculation for callers that handle invalid input.
+pub fn try_compute_clustering_metrics(
+    features: &[Vec<f64>],
+    assignments: &[usize],
+    k: usize,
+    pca_data: Vec<PcaScatterPoint>,
+) -> Result<ClusteringMetrics, MlError> {
+    if features.is_empty() {
+        return Err(MlError::InvalidInput(
+            "Clustering metrics require at least one data point.".into(),
+        ));
+    }
+    if features.len() != assignments.len() {
+        return Err(MlError::InvalidInput(
+            "Features and cluster assignments have different lengths.".into(),
+        ));
+    }
+    if k == 0 {
+        return Err(MlError::InvalidInput(
+            "The number of clusters must be at least one.".into(),
+        ));
+    }
+    let dimensions = features[0].len();
+    if dimensions == 0 {
+        return Err(MlError::InvalidInput(
+            "Clustering metrics require at least one feature.".into(),
+        ));
+    }
+    for (row_index, row) in features.iter().enumerate() {
+        if row.len() != dimensions {
+            return Err(MlError::InvalidInput(format!(
+                "Row {} has {} features; expected {dimensions}.",
+                row_index + 1,
+                row.len()
+            )));
+        }
+        for (column_index, value) in row.iter().enumerate() {
+            if !value.is_finite() {
+                return Err(MlError::InvalidInput(format!(
+                    "Feature at row {}, column {} is not finite ({value}).",
+                    row_index + 1,
+                    column_index + 1
+                )));
+            }
+        }
+    }
+    if let Some((sample, cluster)) = assignments
+        .iter()
+        .enumerate()
+        .find(|(_, cluster)| **cluster >= k)
+    {
+        return Err(MlError::InvalidInput(format!(
+            "Sample {} has cluster {cluster}; expected a cluster index below {k}.",
+            sample + 1
+        )));
+    }
+
+    let mut cluster_counts: HashMap<usize, usize> = (0..k).map(|cluster| (cluster, 0)).collect();
     for &c in assignments {
         *cluster_counts.entry(c).or_insert(0) += 1;
     }
 
-    ClusteringMetrics {
-        silhouette_score: 0.0,
-        davies_bouldin_index: 0.0,
+    Ok(ClusteringMetrics {
+        silhouette_score: silhouette_score(features, assignments),
+        davies_bouldin_index: davies_bouldin_index(features, assignments),
         num_clusters: k,
         cluster_counts,
         pca_scatter_data: pca_data,
-    }
+    })
 }
 
 #[cfg(test)]
