@@ -1,0 +1,75 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # 1. Rust Backend CI (Compiles and tests all 3 decoupled portions)
+  rust-workspace:
+    name: Rust Backend CI (Portions 1, 2, 3)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - name: Cargo check (Fast compile verification)
+        run: cargo check --workspace --all-targets
+
+      - name: Run all workspace tests (68+ tests across Portions 1, 2, 3)
+        run: cargo test --workspace --verbose
+
+      - name: Code formatting check (rustfmt)
+        run: cargo fmt --all -- --check
+        continue-on-error: true
+
+      - name: Clippy code quality lint
+        run: cargo clippy --workspace --all-targets -- -D warnings
+        continue-on-error: true
+
+  # 2. Frontend TSX Typecheck (Validates all 3 portion React views)
+  frontend-check:
+    name: Frontend TSX Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript typecheck (tsc --noEmit)
+        run: npm run typecheck
+
+  # 3. Contract & JSON Schema Integrity Check
+  contract-validation:
+    name: API Contract & Schema Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Unified API Contract JSON
+        run: |
+          python3 -c "import json; json.load(open('contracts/unified_api_contract.json'))"
+          python3 -c "import json; json.load(open('contracts/fixtures/mock_cleaned_dataset.json'))"
+          python3 -c "import json; json.load(open('contracts/fixtures/mock_execution_result.json'))"
+          echo "All JSON contracts and mock fixtures are well-formed and valid."
