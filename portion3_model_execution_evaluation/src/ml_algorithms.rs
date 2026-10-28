@@ -65,8 +65,8 @@ pub fn try_run_kmeans(
     }
     if k == 0 || k > features.len() {
         return Err(MlError::InvalidInput(format!(
-            "The number of clusters must be between 1 and the number of data points ({}).",
-            features.len()
+            "Requested {k} clusters, but valid values are from 1 to {} for this dataset.",
+            features.len(),
         )));
     }
     let dimensions = features[0].len();
@@ -75,15 +75,32 @@ pub fn try_run_kmeans(
             "Select at least one feature column for clustering.".into(),
         ));
     }
-    if features.iter().any(|row| row.len() != dimensions) {
-        return Err(MlError::InvalidInput(
-            "All rows must have the same number of features.".into(),
-        ));
+    if let Some((row_index, row)) = features
+        .iter()
+        .enumerate()
+        .find(|(_, row)| row.len() != dimensions)
+    {
+        return Err(MlError::InvalidInput(format!(
+            "Row {} has {} features; expected {dimensions}.",
+            row_index + 1,
+            row.len(),
+        )));
     }
-    if features.iter().flatten().any(|value| !value.is_finite()) {
-        return Err(MlError::InvalidInput(
-            "Features contain NaN or infinite values.".into(),
-        ));
+    if let Some((row_index, column_index, value)) = features
+        .iter()
+        .enumerate()
+        .find_map(|(row_index, row)| {
+            row.iter()
+                .enumerate()
+                .find(|(_, value)| !value.is_finite())
+                .map(|(column_index, value)| (row_index, column_index, value))
+        })
+    {
+        return Err(MlError::InvalidInput(format!(
+            "Feature at row {}, column {} is not finite ({value}).",
+            row_index + 1,
+            column_index + 1,
+        )));
     }
 
     let squared_distance = |left: &[f64], right: &[f64]| {
@@ -600,27 +617,36 @@ mod supervised_tests {
 
         #[test]
         fn rejects_empty_invalid_or_malformed_data() {
-            assert!(matches!(
-                try_run_kmeans(&[], 1, 10),
-                Err(MlError::InvalidInput(_))
-            ));
+            assert_eq!(
+                try_run_kmeans(&[], 1, 10).unwrap_err(),
+                MlError::InvalidInput("Clustering requires at least one data point.".into())
+            );
             let features = vec![vec![0.0], vec![1.0]];
-            assert!(matches!(
-                try_run_kmeans(&features, 0, 10),
-                Err(MlError::InvalidInput(_))
-            ));
-            assert!(matches!(
-                try_run_kmeans(&features, 3, 10),
-                Err(MlError::InvalidInput(_))
-            ));
-            assert!(matches!(
-                try_run_kmeans(&[vec![0.0], vec![1.0, 2.0]], 1, 10),
-                Err(MlError::InvalidInput(_))
-            ));
-            assert!(matches!(
-                try_run_kmeans(&[vec![f64::NAN], vec![1.0]], 1, 10),
-                Err(MlError::InvalidInput(_))
-            ));
+            assert_eq!(
+                try_run_kmeans(&features, 0, 10).unwrap_err(),
+                MlError::InvalidInput(
+                    "Requested 0 clusters, but valid values are from 1 to 2 for this dataset."
+                        .into()
+                )
+            );
+            assert_eq!(
+                try_run_kmeans(&features, 3, 10).unwrap_err(),
+                MlError::InvalidInput(
+                    "Requested 3 clusters, but valid values are from 1 to 2 for this dataset."
+                        .into()
+                )
+            );
+            assert_eq!(
+                try_run_kmeans(&[vec![0.0], vec![1.0, 2.0]], 1, 10).unwrap_err(),
+                MlError::InvalidInput("Row 2 has 2 features; expected 1.".into())
+            );
+            assert_eq!(
+                try_run_kmeans(&[vec![0.0, f64::NAN], vec![1.0, 2.0]], 1, 10)
+                    .unwrap_err(),
+                MlError::InvalidInput(
+                    "Feature at row 1, column 2 is not finite (NaN).".into()
+                )
+            );
         }
     }
 
