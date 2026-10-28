@@ -18,25 +18,199 @@ use smartcore::tree::decision_tree_regressor::{
 use std::collections::HashSet;
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
-/// Principal Component Analysis (PCA) 2D projection for scatter plot rendering
-///
-/// TODO: Assigned to Shreya Patil (PES2UG24CS484)
-/// Requirements (FR-11):
-/// - Center feature matrix around column means
-/// - Compute 2D principal component projections (PC1, PC2)
-/// - Return list of (x, y) coordinates with cluster assignments
-pub fn project_pca_2d(_features: &[Vec<f64>], assignments: &[usize]) -> Vec<PcaScatterPoint> {
-    // SKELETON PLACEHOLDER: Shreya to implement 2D PCA projection algorithm
-    let mut points = Vec::new();
-    for (i, &c) in assignments.iter().enumerate() {
+/// Projects centered feature rows onto the first two principal components.
+/// The second coordinate is zero when the input has only one feature.
+pub fn project_pca_2d(features: &[Vec<f64>], assignments: &[usize]) -> Vec<PcaScatterPoint> {
+    try_project_pca_2d(features, assignments).unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Fallible PCA projection for callers that can handle invalid input.
+pub fn try_project_pca_2d(
+    features: &[Vec<f64>],
+    assignments: &[usize],
+) -> Result<Vec<PcaScatterPoint>, MlError> {
+    if features.is_empty() {
+        return Err(MlError::InvalidInput(
+            "PCA requires at least one data point.".into(),
+        ));
+    }
+    if features.len() != assignments.len() {
+        return Err(MlError::InvalidInput(
+            "Features and cluster assignments have different lengths.".into(),
+        ));
+    }
+
+    let dimensions = features[0].len();
+    if dimensions == 0 {
+        return Err(MlError::InvalidInput(
+            "Select at least one feature column for PCA.".into(),
+        ));
+    }
+    for (row_index, row) in features.iter().enumerate() {
+        if row.len() != dimensions {
+            return Err(MlError::InvalidInput(format!(
+                "Row {} has {} features; expected {dimensions}.",
+                row_index + 1,
+                row.len()
+            )));
+        }
+        for (column_index, value) in row.iter().enumerate() {
+            if !value.is_finite() {
+                return Err(MlError::InvalidInput(format!(
+                    "Feature at row {}, column {} is not finite ({value}).",
+                    row_index + 1,
+                    column_index + 1
+                )));
+            }
+        }
+    }
+
+    let mut means = vec![0.0; dimensions];
+    for (row_index, row) in features.iter().enumerate() {
+        let count = (row_index + 1) as f64;
+        for (mean, &value) in means.iter_mut().zip(row) {
+            *mean = *mean * ((count - 1.0) / count) + value / count;
+        }
+    }
+    let centered: Vec<Vec<f64>> = features
+        .iter()
+        .map(|row| row.iter().zip(&means).map(|(value, mean)| value - mean).collect())
+        .collect();
+    if centered.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(MlError::InvalidInput(
+            "Centering the PCA features produced non-finite values.".into(),
+        ));
+    }
+
+    let mut covariance = vec![vec![0.0; dimensions]; dimensions];
+    for row in &centered {
+        for left in 0..dimensions {
+            for right in left..dimensions {
+                covariance[left][right] += row[left] * row[right];
+            }
+        }
+    }
+    for left in 0..dimensions {
+        for right in left..dimensions {
+            covariance[left][right] /= features.len() as f64;
+            covariance[right][left] = covariance[left][right];
+        }
+    }
+    if covariance.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(MlError::InvalidInput(
+            "PCA could not calculate a finite covariance matrix.".into(),
+        ));
+    }
+
+    let components = symmetric_eigenvectors(&covariance)?;
+    let mut points = Vec::with_capacity(features.len());
+    for (sample_id, (row, &cluster)) in centered.iter().zip(assignments).enumerate() {
+        let project = |component: Option<&Vec<f64>>| {
+            component
+                .map(|axis| row.iter().zip(axis).map(|(value, weight)| value * weight).sum())
+                .unwrap_or(0.0)
+        };
+        let x = project(components.first());
+        let y = project(components.get(1));
+        if !x.is_finite() || !y.is_finite() {
+            return Err(MlError::InvalidInput(
+                "PCA projection produced non-finite coordinates.".into(),
+            ));
+        }
         points.push(PcaScatterPoint {
-            sample_id: i,
-            x: 0.0,
-            y: 0.0,
-            cluster: c,
+            sample_id,
+            x,
+            y,
+            cluster,
         });
     }
-    points
+    Ok(points)
+}
+
+fn symmetric_eigenvectors(matrix: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, MlError> {
+    let dimensions = matrix.len();
+    let mut values = matrix.to_vec();
+    let mut vectors = vec![vec![0.0; dimensions]; dimensions];
+    for (index, row) in vectors.iter_mut().enumerate() {
+        row[index] = 1.0;
+    }
+
+    let max_iterations = dimensions.saturating_mul(dimensions).saturating_mul(100).max(1);
+    for _ in 0..max_iterations {
+        let mut largest = 0.0_f64;
+        let mut pivot = (0, 0);
+        for row in 0..dimensions {
+            for column in (row + 1)..dimensions {
+                if values[row][column].abs() > largest {
+                    largest = values[row][column].abs();
+                    pivot = (row, column);
+                }
+            }
+        }
+        let scale = (0..dimensions)
+            .map(|index| values[index][index].abs())
+            .fold(1.0_f64, f64::max);
+        if largest <= f64::EPSILON * 16.0 * scale {
+            break;
+        }
+
+        let (p, q) = pivot;
+        let angle = 0.5 * (2.0 * values[p][q]).atan2(values[q][q] - values[p][p]);
+        let (sin, cos) = angle.sin_cos();
+        let app = values[p][p];
+        let aqq = values[q][q];
+        let apq = values[p][q];
+
+        for index in 0..dimensions {
+            if index != p && index != q {
+                let aip = values[index][p];
+                let aiq = values[index][q];
+                values[index][p] = cos * aip - sin * aiq;
+                values[p][index] = values[index][p];
+                values[index][q] = sin * aip + cos * aiq;
+                values[q][index] = values[index][q];
+            }
+        }
+        values[p][p] = cos * cos * app - 2.0 * sin * cos * apq + sin * sin * aqq;
+        values[q][q] = sin * sin * app + 2.0 * sin * cos * apq + cos * cos * aqq;
+        values[p][q] = 0.0;
+        values[q][p] = 0.0;
+
+        for row in &mut vectors {
+            let vip = row[p];
+            let viq = row[q];
+            row[p] = cos * vip - sin * viq;
+            row[q] = sin * vip + cos * viq;
+        }
+    }
+
+    if values.iter().flatten().any(|value| !value.is_finite())
+        || vectors.iter().flatten().any(|value| !value.is_finite())
+    {
+        return Err(MlError::InvalidInput(
+            "PCA eigendecomposition produced non-finite values.".into(),
+        ));
+    }
+    let mut order: Vec<usize> = (0..dimensions).collect();
+    order.sort_by(|&left, &right| values[right][right].total_cmp(&values[left][left]));
+    Ok(order
+        .into_iter()
+        .map(|index| {
+            let mut component: Vec<f64> = vectors.iter().map(|row| row[index]).collect();
+            if let Some((pivot, _)) = component
+                .iter()
+                .enumerate()
+                .max_by(|(_, left), (_, right)| left.abs().total_cmp(&right.abs()))
+            {
+                if component[pivot].is_sign_negative() {
+                    for value in &mut component {
+                        *value = -*value;
+                    }
+                }
+            }
+            component
+        })
+        .collect())
 }
 
 /// K-Means Clustering Algorithm
