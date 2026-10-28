@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "noEmit": true
+  },
+  "include": [
+    "portion1_data_ingestion_preprocessing/frontend/**/*",
+    "portion2_task_routing_configuration/frontend/**/*",
+    "portion3_model_execution_evaluation/frontend/**/*"
+  ]
+}

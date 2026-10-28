@@ -10,7 +10,8 @@
     "test:rust": "cargo test --workspace",
     "test:portion1": "cargo test -p portion1_data_ingestion_preprocessing",
     "test:portion2": "cargo test -p portion2_task_routing_configuration",
-    "test:portion3": "cargo test -p portion3_model_execution_evaluation"
+    "test:portion3": "cargo test -p portion3_model_execution_evaluation",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "typescript": "^5.0.0",

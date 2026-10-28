@@ -1,0 +1,49 @@
+name: CD Release Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    name: Build & Package Production Artifacts
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Rust toolchain
+        uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+
+      - name: Build release binaries for all 3 microservices
+        run: cargo build --release --workspace
+
+      - name: Verify release binaries
+        run: |
+          ls -la target/release/portion1_data_ingestion_preprocessing
+          ls -la target/release/portion2_task_routing_configuration
+          ls -la target/release/portion3_model_execution_evaluation
+
+      - name: Upload Portion 1 release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portion1-data-ingestion-service-linux
+          path: target/release/portion1_data_ingestion_preprocessing
+          retention-days: 14
+
+      - name: Upload Portion 2 release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portion2-task-routing-service-linux
+          path: target/release/portion2_task_routing_configuration
+          retention-days: 14
+
+      - name: Upload Portion 3 release artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: portion3-model-execution-service-linux
+          path: target/release/portion3_model_execution_evaluation
+          retention-days: 14
