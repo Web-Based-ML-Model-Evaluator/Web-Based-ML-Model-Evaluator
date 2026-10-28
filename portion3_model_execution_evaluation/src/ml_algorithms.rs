@@ -46,14 +46,148 @@ pub fn project_pca_2d(_features: &[Vec<f64>], assignments: &[usize]) -> Vec<PcaS
 /// - Initialize k centroids
 /// - Assign points to nearest centroid
 /// - Recalculate centroids until convergence
-pub fn run_kmeans(features: &[Vec<f64>], k: usize, _max_iter: usize) -> Vec<usize> {
-    // SKELETON PLACEHOLDER: Shreya to implement K-Means clustering algorithm
-    let effective_k = k.max(1);
-    features
-        .iter()
-        .enumerate()
-        .map(|(i, _)| i % effective_k)
-        .collect()
+
+/// Runs deterministic K-means and returns one cluster index per input row.
+pub fn run_kmeans(features: &[Vec<f64>], k: usize, max_iter: usize) -> Vec<usize> {
+    try_run_kmeans(features, k, max_iter).unwrap_or_else(|error| panic!("{error}"))
+}
+
+/// Fallible K-means implementation for callers that can handle invalid input.
+pub fn try_run_kmeans(
+    features: &[Vec<f64>],
+    k: usize,
+    max_iter: usize,
+) -> Result<Vec<usize>, MlError> {
+    if features.is_empty() {
+        return Err(MlError::InvalidInput(
+            "Clustering requires at least one data point.".into(),
+        ));
+    }
+    if k == 0 || k > features.len() {
+        return Err(MlError::InvalidInput(format!(
+            "The number of clusters must be between 1 and the number of data points ({}).",
+            features.len()
+        )));
+    }
+    let dimensions = features[0].len();
+    if dimensions == 0 {
+        return Err(MlError::InvalidInput(
+            "Select at least one feature column for clustering.".into(),
+        ));
+    }
+    if features.iter().any(|row| row.len() != dimensions) {
+        return Err(MlError::InvalidInput(
+            "All rows must have the same number of features.".into(),
+        ));
+    }
+    if features.iter().flatten().any(|value| !value.is_finite()) {
+        return Err(MlError::InvalidInput(
+            "Features contain NaN or infinite values.".into(),
+        ));
+    }
+
+    let squared_distance = |left: &[f64], right: &[f64]| {
+        left.iter()
+            .zip(right)
+            .map(|(a, b)| (a - b).powi(2))
+            .sum::<f64>()
+    };
+
+    // K-means++ seeding with a fixed PRNG seed keeps runs repeatable.
+    let mut random_state = 42_u64;
+    let mut next_random = || {
+        random_state ^= random_state >> 12;
+        random_state ^= random_state << 25;
+        random_state ^= random_state >> 27;
+        random_state.wrapping_mul(0x2545_F491_4F6C_DD1D)
+    };
+    let first = (next_random() as usize) % features.len();
+    let mut selected = vec![first];
+    let mut centroids = vec![features[first].clone()];
+
+    while centroids.len() < k {
+        let distances: Vec<f64> = features
+            .iter()
+            .map(|point| {
+                centroids
+                    .iter()
+                    .map(|center| squared_distance(point, center))
+                    .fold(f64::INFINITY, f64::min)
+            })
+            .collect();
+        let total_distance = distances.iter().sum::<f64>();
+        let next_index = if total_distance.is_finite() && total_distance > 0.0 {
+            let threshold =
+                (next_random() as f64 / u64::MAX as f64) * total_distance;
+            let mut cumulative = 0.0;
+            distances
+                .iter()
+                .position(|distance| {
+                    cumulative += distance;
+                    cumulative >= threshold
+                })
+                .filter(|index| !selected.contains(index))
+                .or_else(|| (0..features.len()).find(|index| !selected.contains(index)))
+        } else {
+            (0..features.len()).find(|index| !selected.contains(index))
+        }
+        .ok_or_else(|| {
+            MlError::InvalidInput("Could not initialize distinct cluster centers.".into())
+        })?;
+
+        selected.push(next_index);
+        centroids.push(features[next_index].clone());
+    }
+
+    let mut assignments = vec![0; features.len()];
+    let mut previous_assignments: Option<Vec<usize>> = None;
+    for _ in 0..max_iter.max(1) {
+        for (index, point) in features.iter().enumerate() {
+            assignments[index] = centroids
+                .iter()
+                .enumerate()
+                .min_by(|(_, left), (_, right)| {
+                    squared_distance(point, left).total_cmp(&squared_distance(point, right))
+                })
+                .map(|(cluster, _)| cluster)
+                .expect("K-means initialized at least one centroid");
+        }
+
+        if previous_assignments.as_ref() == Some(&assignments) {
+            break;
+        }
+        previous_assignments = Some(assignments.clone());
+
+        let mut sums = vec![vec![0.0; dimensions]; k];
+        let mut counts = vec![0usize; k];
+        for (point, &cluster) in features.iter().zip(&assignments) {
+            counts[cluster] += 1;
+            for (sum, value) in sums[cluster].iter_mut().zip(point) {
+                *sum += value;
+            }
+        }
+        for cluster in 0..k {
+            if counts[cluster] > 0 {
+                for value in &mut sums[cluster] {
+                    *value /= counts[cluster] as f64;
+                }
+                centroids[cluster] = std::mem::take(&mut sums[cluster]);
+            }
+        }
+    }
+
+    // Reassign against the final centroids, including when max_iter was reached.
+    for (index, point) in features.iter().enumerate() {
+        assignments[index] = centroids
+            .iter()
+            .enumerate()
+            .min_by(|(_, left), (_, right)| {
+                squared_distance(point, left).total_cmp(&squared_distance(point, right))
+            })
+            .map(|(cluster, _)| cluster)
+            .expect("K-means initialized at least one centroid");
+    }
+    Ok(assignments)
 }
 
 /// Errors from supervised model execution. `message()` is safe to show to the
@@ -420,6 +554,73 @@ mod supervised_tests {
             // (chance is 0.33), not a quality bar. Exactness is checked by the oracle test below.
             assert!(m.accuracy >= 0.6, "{algo}: accuracy {} too low", m.accuracy);
             assert!(m.precision.is_finite() && m.recall.is_finite() && m.f1_score.is_finite());
+        }
+    }
+
+    #[cfg(test)]
+    mod kmeans_tests {
+        use super::*;
+
+        #[test]
+        fn groups_nearby_points_not_adjacent_rows() {
+            let features = vec![
+                vec![0.0, 0.0],
+                vec![100.0, 100.0],
+                vec![1.0, 1.0],
+                vec![101.0, 99.0],
+                vec![-1.0, 1.0],
+                vec![99.0, 101.0],
+            ];
+            let assignments = try_run_kmeans(&features, 2, 100).unwrap();
+
+            assert_eq!(assignments.len(), features.len());
+            assert_eq!(assignments[0], assignments[2]);
+            assert_eq!(assignments[0], assignments[4]);
+            assert_eq!(assignments[1], assignments[3]);
+            assert_eq!(assignments[1], assignments[5]);
+            assert_ne!(assignments[0], assignments[1]);
+        }
+
+        #[test]
+        fn results_are_deterministic_and_single_cluster_labels_all_rows_zero() {
+            let features = vec![vec![0.0], vec![2.0], vec![10.0], vec![12.0]];
+            let first = try_run_kmeans(&features, 2, 50).unwrap();
+            let second = try_run_kmeans(&features, 2, 50).unwrap();
+            assert_eq!(first, second);
+            assert_eq!(run_kmeans(&features, 1, 50), vec![0; features.len()]);
+        }
+
+        #[test]
+        fn identical_points_are_supported() {
+            let features = vec![vec![3.0, 3.0]; 4];
+            let assignments = try_run_kmeans(&features, 3, 20).unwrap();
+            assert_eq!(assignments.len(), features.len());
+            assert!(assignments.iter().all(|&cluster| cluster < 3));
+        }
+
+        #[test]
+        fn rejects_empty_invalid_or_malformed_data() {
+            assert!(matches!(
+                try_run_kmeans(&[], 1, 10),
+                Err(MlError::InvalidInput(_))
+            ));
+            let features = vec![vec![0.0], vec![1.0]];
+            assert!(matches!(
+                try_run_kmeans(&features, 0, 10),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                try_run_kmeans(&features, 3, 10),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                try_run_kmeans(&[vec![0.0], vec![1.0, 2.0]], 1, 10),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                try_run_kmeans(&[vec![f64::NAN], vec![1.0]], 1, 10),
+                Err(MlError::InvalidInput(_))
+            ));
         }
     }
 
