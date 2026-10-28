@@ -21,11 +21,10 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 /// Projects centered feature rows onto the first two principal components.
 /// The second coordinate is zero when the input has only one feature.
 pub fn project_pca_2d(features: &[Vec<f64>], assignments: &[usize]) -> Vec<PcaScatterPoint> {
-    try_project_pca_2d(features, assignments).unwrap_or_else(|error| panic!("{error}"))
+    project_pca_2d_checked(features, assignments).unwrap_or_else(|error| panic!("{error}"))
 }
 
-/// Fallible PCA projection for callers that can handle invalid input.
-pub fn try_project_pca_2d(
+fn project_pca_2d_checked(
     features: &[Vec<f64>],
     assignments: &[usize],
 ) -> Result<Vec<PcaScatterPoint>, MlError> {
@@ -769,7 +768,7 @@ mod supervised_tests {
             ];
             let assignments = vec![3, 2, 1, 0];
 
-            let points = try_project_pca_2d(&features, &assignments).unwrap();
+            let points = project_pca_2d_checked(&features, &assignments).unwrap();
 
             assert_eq!(points.len(), features.len());
             for (index, point) in points.iter().enumerate() {
@@ -794,7 +793,7 @@ mod supervised_tests {
                 vec![2.0, 1.0, 3.0],
             ];
             let assignments = vec![0, 1, 1, 0];
-            let points = try_project_pca_2d(&features, &assignments).unwrap();
+            let points = project_pca_2d_checked(&features, &assignments).unwrap();
 
             let projected_sum_squares = points
                 .iter()
@@ -822,8 +821,8 @@ mod supervised_tests {
             ];
             let assignments = vec![2, 0, 2, 1];
 
-            let first = try_project_pca_2d(&features, &assignments).unwrap();
-            let second = try_project_pca_2d(&features, &assignments).unwrap();
+            let first = project_pca_2d_checked(&features, &assignments).unwrap();
+            let second = project_pca_2d_checked(&features, &assignments).unwrap();
 
             for (left, right) in first.iter().zip(second) {
                 assert_eq!(left.sample_id, right.sample_id);

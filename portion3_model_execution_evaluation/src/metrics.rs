@@ -251,12 +251,11 @@ pub fn compute_clustering_metrics(
     k: usize,
     pca_data: Vec<PcaScatterPoint>,
 ) -> ClusteringMetrics {
-    try_compute_clustering_metrics(features, assignments, k, pca_data)
+    compute_clustering_metrics_checked(features, assignments, k, pca_data)
         .unwrap_or_else(|error| panic!("{error}"))
 }
 
-/// Fallible clustering metrics calculation for callers that handle invalid input.
-pub fn try_compute_clustering_metrics(
+fn compute_clustering_metrics_checked(
     features: &[Vec<f64>],
     assignments: &[usize],
     k: usize,
