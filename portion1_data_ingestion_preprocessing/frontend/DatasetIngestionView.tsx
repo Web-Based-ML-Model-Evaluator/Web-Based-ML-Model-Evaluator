@@ -33,6 +33,10 @@ export interface DatasetIngestionViewProps {
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (NFR-4)
 
+// Shared table cell styles (FR-2 tables)
+const thStyle: React.CSSProperties = { padding: '8px', borderBottom: '1px solid #e2e8f0' };
+const tdStyle: React.CSSProperties = { padding: '8px', borderBottom: '1px solid #f1f5f9' };
+
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
   onDatasetReady: _onDatasetReady,
   apiBaseUrl = 'http://localhost:8001',
@@ -67,6 +71,7 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
   };
 
   // FR-1: send the file to POST /api/v1/datasets/upload
+  // FR-2: the server's response contains the summary and preview shown in Step 2
   const handleUpload = async () => {
     if (!file) {
       setError('Please choose a CSV file first.');
@@ -74,6 +79,7 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     }
     setUploading(true);
     setError(null);
+    setUploadResult(null);
     try {
       const formData = new FormData();
       formData.append('file', file); // the server expects the key "file"
@@ -151,13 +157,79 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
         )}
       </section>
 
-      {/* SKELETON SECTION 2: Dataset Summary & 5-Row Preview (FR-2) */}
+      {/* SECTION 2: Dataset Summary & 5-Row Preview (FR-2) */}
       <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '24px' }}>
         <h3>Step 2: Dataset Preview & Summary (FR-2)</h3>
-        <p style={{ color: '#64748b', fontSize: '14px' }}>
-          {/* TODO: Sneha Ajith - Display total rows, columns, data types, missing counts, and 5-row preview table */}
-          [TODO: Sneha Ajith - Render dataset metrics badges and 5-row preview table here]
-        </p>
+
+        {!uploadResult ? (
+          <p style={{ color: '#64748b', fontSize: '14px' }}>Upload a CSV above to see its summary here.</p>
+        ) : (
+          <>
+            {/* Metric badges: rows, columns, file size */}
+            <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '20px' }}>
+              {[
+                ['Rows', uploadResult.total_rows],
+                ['Columns', uploadResult.total_columns],
+                ['File size', `${(uploadResult.file_size_bytes / 1024).toFixed(1)} KB`],
+              ].map(([label, value]) => (
+                <div key={label} style={{ padding: '8px 16px', backgroundColor: '#f1f5f9', borderRadius: '6px' }}>
+                  <div style={{ fontSize: '12px', color: '#64748b' }}>{label}</div>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b' }}>{value}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Column summary: data type and missing values */}
+            <h4 style={{ margin: '0 0 8px' }}>Columns</h4>
+            <div style={{ overflowX: 'auto', marginBottom: '20px' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '14px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
+                    <th style={thStyle}>Name</th>
+                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>Missing</th>
+                    <th style={thStyle}>Missing %</th>
+                    <th style={thStyle}>Sample values</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {uploadResult.column_summaries.map((col) => (
+                    <tr key={col.name}>
+                      <td style={tdStyle}>{col.name}</td>
+                      <td style={tdStyle}>{col.inferred_type}</td>
+                      <td style={tdStyle}>{col.missing_count}</td>
+                      <td style={tdStyle}>{col.missing_percentage}%</td>
+                      <td style={tdStyle}>{col.sample_values.join(', ')}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* 5-row preview */}
+            <h4 style={{ margin: '0 0 8px' }}>First {uploadResult.preview_rows.length} rows</h4>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '14px' }}>
+                <thead>
+                  <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
+                    {uploadResult.column_names.map((name) => (
+                      <th key={name} style={thStyle}>{name}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {uploadResult.preview_rows.map((row, i) => (
+                    <tr key={i}>
+                      {uploadResult.column_names.map((name) => (
+                        <td key={name} style={tdStyle}>{row[name]}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </section>
 
       {/* SKELETON SECTION 3: Missing Value Imputation (FR-3) */}
