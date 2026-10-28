@@ -794,7 +794,7 @@ mod supervised_tests {
         // rows stay aligned between X and y
         assert!(tr_a.iter().zip(&tr_b).all(|(a, b)| a * 2 == *b));
         assert!(te_a.iter().zip(&te_b).all(|(a, b)| a * 2 == *b));
-        // nothing lost or duplicated
+        // nothing lost
         let mut all: Vec<usize> = tr_a.iter().chain(&te_a).cloned().collect();
         all.sort();
         assert_eq!(all, idx);
