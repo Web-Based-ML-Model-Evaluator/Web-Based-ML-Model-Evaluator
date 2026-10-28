@@ -14,7 +14,6 @@ use handlers::{
 };
 use std::net::SocketAddr;
 use tower_http::cors::{Any, CorsLayer};
-use validator::MAX_FILE_SIZE_BYTES;
 
 pub fn create_router(state: AppState) -> Router {
     let cors = CorsLayer::new()
