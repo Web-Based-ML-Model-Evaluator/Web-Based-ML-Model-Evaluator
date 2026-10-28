@@ -1,4 +1,4 @@
-use chrono::{DateTime, Utc};
+﻿use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -93,7 +93,7 @@ pub enum MetricResults {
 }
 
 /// Stored entry for the side-by-side Model Comparison Dashboard (FR-12)
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct ModelComparisonEntry {
     pub execution_id: String,
     pub dataset_id: String,
