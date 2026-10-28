@@ -3,7 +3,8 @@ use crate::metrics::{
     compute_classification_metrics, compute_clustering_metrics, compute_regression_metrics,
 };
 use crate::ml_algorithms::{
-    project_pca_2d, run_classification_model, run_kmeans, run_regression_model,
+    project_pca_2d, run_kmeans, split_shuffled, try_run_classification_model,
+    try_run_regression_model,
 };
 use crate::models::{
     ExecutionRequest, ExecutionResponse, MetricResults, ModelComparisonEntry,
@@ -133,12 +134,20 @@ pub async fn execute_model(
                 })
                 .collect();
 
-            // Train / test split
-            let (x_train, x_test) = feature_matrix.split_at(train_samples);
-            let (y_train, y_test) = labels.split_at(train_samples);
+            // Train / test split using deterministic shuffle
+            let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
+            let (y_train, y_test) = split_shuffled(&labels, train_samples);
 
-            let predictions = run_classification_model(&req.algorithm, x_train, y_train, x_test);
-            let class_metrics = compute_classification_metrics(y_test, &predictions);
+            let predictions = match try_run_classification_model(&req.algorithm, &x_train, &y_train, &x_test) {
+                Ok(p) => p,
+                Err(err) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None)),
+                    ));
+                }
+            };
+            let class_metrics = compute_classification_metrics(&y_test, &predictions);
 
             let mut summary_map = HashMap::new();
             summary_map.insert("accuracy".to_string(), class_metrics.accuracy);
@@ -175,11 +184,19 @@ pub async fn execute_model(
                 })
                 .collect();
 
-            let (x_train, x_test) = feature_matrix.split_at(train_samples);
-            let (y_train, y_test) = targets.split_at(train_samples);
+            let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
+            let (y_train, y_test) = split_shuffled(&targets, train_samples);
 
-            let predictions = run_regression_model(&req.algorithm, x_train, y_train, x_test);
-            let reg_metrics = compute_regression_metrics(y_test, &predictions);
+            let predictions = match try_run_regression_model(&req.algorithm, &x_train, &y_train, &x_test) {
+                Ok(p) => p,
+                Err(err) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        Json(StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None)),
+                    ));
+                }
+            };
+            let reg_metrics = compute_regression_metrics(&y_test, &predictions);
 
             let mut summary_map = HashMap::new();
             summary_map.insert("mae".to_string(), reg_metrics.mean_absolute_error);

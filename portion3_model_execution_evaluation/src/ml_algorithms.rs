@@ -237,6 +237,7 @@ fn internal<E: std::fmt::Debug>(e: E) -> MlError {
 /// Fits the chosen classifier on the training rows and returns one predicted label per
 /// test row. Supported: Logistic Regression, Decision Tree Classifier, Random Forest
 /// Classifier, K-Nearest Neighbors (KNN). Features are standardised with train statistics.
+#[allow(dead_code)]
 pub fn run_classification_model(
     algorithm: &str,
     x_train: &[Vec<f64>],
@@ -317,6 +318,7 @@ pub fn try_run_classification_model(
 ///
 /// Fits the chosen regressor on the training rows and returns one prediction per test
 /// row. Supported: Linear Regression, Decision Tree Regressor, Random Forest Regressor.
+#[allow(dead_code)]
 pub fn run_regression_model(
     algorithm: &str,
     x_train: &[Vec<f64>],
