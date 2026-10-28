@@ -3,8 +3,6 @@ use crate::ml_algorithms::MlError;
 use std::collections::HashMap;
 
 /// Computes Classification Metrics: Accuracy, Precision, Recall, F1, and Confusion Matrix
-///
-/// TODO: Assigned to Shreya Patil (PES2UG24CS484)
 /// Requirements (FR-9):
 /// - Accuracy = Correct / Total
 /// - Macro-averaged Precision, Recall, and F1-Score
@@ -13,7 +11,6 @@ pub fn compute_classification_metrics(
     actual: &[String],
     predicted: &[String],
 ) -> ClassificationMetrics {
-    // SKELETON PLACEHOLDER: Shreya to implement classification metric calculations
     let pairs: Vec<(&String, &String)> = actual.iter().zip(predicted.iter()).collect();
 
     let class_labels = sorted_labels(&pairs);
@@ -447,5 +444,80 @@ mod regression_tests {
         let predicted = vec![5.0, 5.0, 5.0];
         let m = compute_regression_metrics(&actual, &predicted);
         close(m.r2_score, 1.0);
+    }
+}
+
+#[cfg(test)]
+mod clustering_metrics_tests {
+    use super::*;
+
+    fn close(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < 1e-9,
+            "{actual} != {expected}"
+        );
+    }
+
+    #[test]
+    fn computes_silhouette_and_davies_bouldin_for_separated_clusters() {
+        let features = vec![vec![0.0], vec![2.0], vec![10.0], vec![12.0]];
+        let assignments = vec![0, 0, 1, 1];
+        let metrics = compute_clustering_metrics(&features, &assignments, 2, vec![]);
+
+        close(metrics.silhouette_score, (9.0 / 11.0 + 7.0 / 9.0) / 2.0);
+        close(metrics.davies_bouldin_index, 0.2);
+    }
+
+    #[test]
+    fn includes_empty_cluster_counts_and_preserves_scatter_points() {
+        let features = vec![vec![0.0], vec![1.0], vec![10.0]];
+        let assignments = vec![0, 0, 2];
+        let scatter = vec![PcaScatterPoint {
+            sample_id: 1,
+            x: 2.5,
+            y: -3.0,
+            cluster: 0,
+        }];
+
+        let metrics = compute_clustering_metrics(&features, &assignments, 3, scatter);
+
+        assert_eq!(metrics.num_clusters, 3);
+        assert_eq!(metrics.cluster_counts.get(&0), Some(&2));
+        assert_eq!(metrics.cluster_counts.get(&1), Some(&0));
+        assert_eq!(metrics.cluster_counts.get(&2), Some(&1));
+        assert_eq!(metrics.pca_scatter_data.len(), 1);
+        assert_eq!(metrics.pca_scatter_data[0].sample_id, 1);
+        close(metrics.pca_scatter_data[0].x, 2.5);
+        close(metrics.pca_scatter_data[0].y, -3.0);
+    }
+
+    #[test]
+    fn undefined_scores_are_zero_for_one_observed_cluster() {
+        let metrics =
+            compute_clustering_metrics(&[vec![0.0], vec![1.0]], &[0, 0], 2, vec![]);
+
+        assert_eq!(metrics.silhouette_score, 0.0);
+        assert_eq!(metrics.davies_bouldin_index, 0.0);
+        assert_eq!(metrics.cluster_counts.get(&1), Some(&0));
+    }
+
+    #[test]
+    fn checked_metrics_reject_inconsistent_inputs() {
+        assert!(matches!(
+            compute_clustering_metrics_checked(&[], &[], 1, vec![]),
+            Err(MlError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            compute_clustering_metrics_checked(&[vec![0.0]], &[], 1, vec![]),
+            Err(MlError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            compute_clustering_metrics_checked(&[vec![0.0]], &[1], 1, vec![]),
+            Err(MlError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            compute_clustering_metrics_checked(&[vec![f64::NAN]], &[0], 1, vec![]),
+            Err(MlError::InvalidInput(_))
+        ));
     }
 }

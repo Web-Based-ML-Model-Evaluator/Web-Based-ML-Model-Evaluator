@@ -212,14 +212,6 @@ fn symmetric_eigenvectors(matrix: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, MlError>
         .collect())
 }
 
-/// K-Means Clustering Algorithm
-///
-/// TODO: Assigned to Shreya Patil (PES2UG24CS484)
-/// Requirements (FR-8, FR-11):
-/// - Initialize k centroids
-/// - Assign points to nearest centroid
-/// - Recalculate centroids until convergence
-
 /// Runs deterministic K-means and returns one cluster index per input row.
 pub fn run_kmeans(features: &[Vec<f64>], k: usize, max_iter: usize) -> Vec<usize> {
     try_run_kmeans(features, k, max_iter).unwrap_or_else(|error| panic!("{error}"))
@@ -830,6 +822,84 @@ mod supervised_tests {
                 close(left.x, right.x);
                 close(left.y, right.y);
             }
+        }
+
+        #[test]
+        fn one_feature_uses_zero_for_the_second_component() {
+            let points =
+                project_pca_2d_checked(&[vec![1.0], vec![3.0], vec![5.0]], &[4, 2, 4]).unwrap();
+
+            assert_eq!(
+                points.iter().map(|point| point.cluster).collect::<Vec<_>>(),
+                vec![4, 2, 4]
+            );
+            for (point, expected_x) in points.iter().zip([-2.0, 0.0, 2.0]) {
+                close(point.x, expected_x);
+                close(point.y, 0.0);
+            }
+        }
+
+        #[test]
+        fn constant_features_project_to_the_origin() {
+            let points = project_pca_2d_checked(
+                &[vec![2.0, 5.0], vec![2.0, 5.0], vec![2.0, 5.0]],
+                &[0, 1, 0],
+            )
+            .unwrap();
+
+            assert!(points.iter().all(|point| point.x == 0.0 && point.y == 0.0));
+        }
+
+        #[test]
+        fn translating_features_does_not_change_the_projection() {
+            let features = vec![
+                vec![-3.0, -1.0, 0.0],
+                vec![-1.0, 2.0, 1.0],
+                vec![1.0, -2.0, -1.0],
+                vec![3.0, 1.0, 0.0],
+            ];
+            let translated: Vec<Vec<f64>> = features
+                .iter()
+                .map(|row| {
+                    row.iter()
+                        .zip([100.0, -50.0, 7.0])
+                        .map(|(value, offset)| value + offset)
+                        .collect()
+                })
+                .collect();
+            let assignments = vec![0, 1, 1, 0];
+
+            let original = project_pca_2d_checked(&features, &assignments).unwrap();
+            let shifted = project_pca_2d_checked(&translated, &assignments).unwrap();
+
+            for (left, right) in original.iter().zip(shifted) {
+                close(left.x, right.x);
+                close(left.y, right.y);
+            }
+        }
+
+        #[test]
+        fn invalid_shapes_non_finite_data_and_covariance_overflow_are_rejected() {
+            assert!(matches!(
+                project_pca_2d_checked(&[], &[]),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                project_pca_2d_checked(&[vec![1.0], vec![2.0]], &[0]),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                project_pca_2d_checked(&[vec![1.0], vec![2.0, 3.0]], &[0, 1]),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                project_pca_2d_checked(&[vec![1.0], vec![f64::INFINITY]], &[0, 1]),
+                Err(MlError::InvalidInput(_))
+            ));
+            assert!(matches!(
+                project_pca_2d_checked(&[vec![1e200], vec![-1e200]], &[0, 1]),
+                Err(MlError::InvalidInput(_))
+            ));
         }
     }
 
