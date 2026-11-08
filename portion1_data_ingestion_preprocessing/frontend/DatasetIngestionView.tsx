@@ -36,8 +36,16 @@ export interface PreprocessingResponse {
   status: string;
 }
 
+// Schema handed to the next wizard step (Portion 2) once the dataset is ready
+export interface DatasetReadySchema {
+  column_names: string[];
+  column_summaries: ColumnSummary[];
+  total_rows: number;
+  preprocessed: boolean;
+}
+
 export interface DatasetIngestionViewProps {
-  onDatasetReady?: (datasetId: string, schema: any) => void;
+  onDatasetReady?: (datasetId: string, schema: DatasetReadySchema) => void;
   apiBaseUrl?: string;
 }
 
