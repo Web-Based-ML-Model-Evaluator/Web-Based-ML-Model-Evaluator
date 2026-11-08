@@ -317,3 +317,86 @@ pub async fn fallback_404_handler() -> impl IntoResponse {
         )),
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::ImputationStrategy;
+
+    /// Uploads a 12-row, 3-column dataset straight into the in-memory state.
+    fn state_with_dataset(id: &str) -> AppState {
+        let mut csv = String::from("x,y,label\n");
+        for i in 0..12 {
+            csv.push_str(&format!(
+                "{},{},{}\n",
+                i,
+                i * 2,
+                if i % 2 == 0 { "a" } else { "b" }
+            ));
+        }
+        let (raw, summary) = parse_csv_summary(id, "t.csv", csv.as_bytes()).unwrap();
+        let state = AppState::default();
+        state
+            .raw_datasets
+            .write()
+            .unwrap()
+            .insert(id.to_string(), raw);
+        state
+            .upload_summaries
+            .write()
+            .unwrap()
+            .insert(id.to_string(), summary);
+        state
+    }
+
+    async fn schema(state: &AppState, id: &str) -> serde_json::Value {
+        get_schema(State(state.clone()), Path(id.to_string()))
+            .await
+            .unwrap()
+            .0
+    }
+
+    #[tokio::test]
+    async fn schema_describes_uploaded_data_before_preprocessing() {
+        let state = state_with_dataset("d1");
+        let s = schema(&state, "d1").await;
+        assert_eq!(s["preprocessed"], false);
+        assert_eq!(s["columns"], serde_json::json!(["x", "y", "label"]));
+        assert_eq!(s["data_types"]["label"], "Categorical");
+        assert_eq!(s["total_rows"], 12);
+    }
+
+    #[tokio::test]
+    async fn schema_omits_columns_dropped_during_preprocessing() {
+        let state = state_with_dataset("d1");
+        let req = PreprocessingRequest {
+            imputation_rules: HashMap::from([("y".to_string(), ImputationStrategy::DropColumn)]),
+            drop_duplicates: false,
+            trim_whitespace: true,
+        };
+        let Json(resp) =
+            preprocess_dataset(State(state.clone()), Path("d1".to_string()), Json(req))
+                .await
+                .unwrap();
+        assert_eq!(
+            resp.remaining_columns,
+            vec!["x".to_string(), "label".to_string()]
+        );
+
+        let s = schema(&state, "d1").await;
+        assert_eq!(s["preprocessed"], true);
+        assert_eq!(s["columns"], serde_json::json!(["x", "label"]));
+        assert!(s["data_types"].get("y").is_none());
+        assert_eq!(s["data_types"]["x"], "Numeric");
+    }
+
+    #[tokio::test]
+    async fn schema_for_unknown_dataset_is_404() {
+        let state = AppState::default();
+        let (status, Json(err)) = get_schema(State(state), Path("missing".to_string()))
+            .await
+            .unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(err.error.code, "DATASET_NOT_FOUND");
+    }
+}
