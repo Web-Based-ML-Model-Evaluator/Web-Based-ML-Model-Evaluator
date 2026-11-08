@@ -232,7 +232,10 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     });
   };
 
-  const canContinue = !!uploadResult && !processing;
+  // Missing values with no rule chosen would reach the models as nulls, so ask the user to
+  // preprocess first. A dataset with no missing values can go straight to Step 2.
+  const hasMissing = (uploadResult?.column_summaries ?? []).some((c) => c.missing_count > 0);
+  const canContinue = !!uploadResult && !processing && (preprocessResult !== null || !hasMissing);
 
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
@@ -501,6 +504,11 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
       {/* Hand-off to Step 2 (Portion 2: Task Routing) */}
       {onDatasetReady && uploadResult && (
         <div style={{ marginTop: '24px', textAlign: 'right' }}>
+          {!canContinue && !processing && (
+            <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 8px' }}>
+              This dataset has missing values. Apply preprocessing before continuing.
+            </p>
+          )}
           <button
             onClick={handleContinue}
             disabled={!canContinue}
