@@ -69,6 +69,32 @@ pub fn parse_csv_summary(
         ));
     }
 
+    // SR-1 / QA-5: every column needs a unique, non-blank name, otherwise downstream
+    // feature/target selection and imputation rules become ambiguous
+    if let Some(pos) = headers.iter().position(|h| h.is_empty()) {
+        return Err(StandardErrorResponse::new(
+            "EMPTY_COLUMN_NAME",
+            &format!(
+                "Column {} has no name. Every column in the header row needs a name.",
+                pos + 1
+            ),
+            Some(serde_json::json!({ "column_position": pos + 1 })),
+        ));
+    }
+    let mut seen_headers: HashSet<&str> = HashSet::new();
+    for h in &headers {
+        if !seen_headers.insert(h.as_str()) {
+            return Err(StandardErrorResponse::new(
+                "DUPLICATE_COLUMN_NAME",
+                &format!(
+                    "The column name '{}' appears more than once. Column names must be unique.",
+                    h
+                ),
+                Some(serde_json::json!({ "column_name": h })),
+            ));
+        }
+    }
+
     let num_cols = headers.len();
     let mut rows: Vec<Vec<String>> = Vec::new();
     for (i, record) in reader.records().enumerate() {
@@ -79,9 +105,26 @@ pub fn parse_csv_summary(
                 None,
             )
         })?;
-        let mut row: Vec<String> = record.iter().map(|f| f.to_string()).collect();
-        row.resize(num_cols, String::new()); // pad short rows, trim long ones
-        rows.push(row);
+        // SR-1: reject rows with the wrong number of values instead of silently
+        // padding/truncating them, which would shift data into the wrong columns
+        if record.len() != num_cols {
+            let line = record.position().map(|p| p.line()).unwrap_or(i as u64 + 2);
+            return Err(StandardErrorResponse::new(
+                "INCONSISTENT_ROW_LENGTH",
+                &format!(
+                    "Line {} has {} values, but the header has {} columns. Check for missing or extra commas.",
+                    line,
+                    record.len(),
+                    num_cols
+                ),
+                Some(serde_json::json!({
+                    "line": line,
+                    "expected_columns": num_cols,
+                    "actual_values": record.len()
+                })),
+            ));
+        }
+        rows.push(record.iter().map(|f| f.to_string()).collect());
     }
 
     if rows.is_empty() {
@@ -263,6 +306,16 @@ pub fn clean_and_impute(
                     "INVALID_STRATEGY",
                     format!(
                         "Cannot use mean or median on column '{}' because it is not numeric. Use mode or a constant instead.",
+                        col
+                    ),
+                ));
+            }
+            // A blank (or "NA"-style) constant would leave the value missing
+            ImputationStrategy::Constant(value) if is_missing(value) => {
+                return Err(fail(
+                    "INVALID_CONSTANT",
+                    format!(
+                        "The constant for column '{}' is empty or a missing-value marker. Enter a real value.",
                         col
                     ),
                 ));
@@ -635,5 +688,81 @@ mod tests {
         let req = request(vec![("zzz", ImputationStrategy::Mode)], false);
         let e = clean_and_impute(&raw, &req).unwrap_err();
         assert_eq!(e.error.code, "UNKNOWN_COLUMN");
+    }
+
+    // ---- Issue 10: structural CSV checks (SR-1, QA-5) ----
+
+    #[test]
+    fn short_row_is_rejected_with_line_number() {
+        let e = parse_csv_summary(
+            "id",
+            "t.csv",
+            b"a,b,c
+1,2,3
+4,5
+",
+        )
+        .unwrap_err();
+        assert_eq!(e.error.code, "INCONSISTENT_ROW_LENGTH");
+        assert!(e.error.message.contains("Line 3"), "{}", e.error.message);
+    }
+
+    #[test]
+    fn long_row_is_rejected() {
+        let e = parse_csv_summary(
+            "id",
+            "t.csv",
+            b"a,b
+1,2
+3,4,5
+",
+        )
+        .unwrap_err();
+        assert_eq!(e.error.code, "INCONSISTENT_ROW_LENGTH");
+    }
+
+    #[test]
+    fn duplicate_column_names_are_rejected() {
+        let e = parse_csv_summary(
+            "id",
+            "t.csv",
+            b"a,b,a
+1,2,3
+",
+        )
+        .unwrap_err();
+        assert_eq!(e.error.code, "DUPLICATE_COLUMN_NAME");
+    }
+
+    #[test]
+    fn blank_column_name_is_rejected() {
+        let e = parse_csv_summary(
+            "id",
+            "t.csv",
+            b"a,,c
+1,2,3
+",
+        )
+        .unwrap_err();
+        assert_eq!(e.error.code, "EMPTY_COLUMN_NAME");
+        assert!(e.error.message.contains("Column 2"));
+    }
+
+    #[test]
+    fn blank_constant_is_rejected() {
+        let raw = raw_from(
+            "a,b
+x,1
+,2
+",
+        );
+        for blank in ["", "   ", "NA"] {
+            let req = request(
+                vec![("a", ImputationStrategy::Constant(blank.to_string()))],
+                false,
+            );
+            let e = clean_and_impute(&raw, &req).unwrap_err();
+            assert_eq!(e.error.code, "INVALID_CONSTANT");
+        }
     }
 }

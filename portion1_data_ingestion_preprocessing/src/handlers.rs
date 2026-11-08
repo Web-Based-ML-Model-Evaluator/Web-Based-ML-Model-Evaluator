@@ -3,7 +3,9 @@ use crate::models::{
     StandardErrorResponse,
 };
 use crate::preprocessing::{clean_and_impute, parse_csv_summary, RawDataset};
-use crate::validator::{sanitize_filename, validate_csv_upload};
+use crate::validator::{
+    sanitize_filename, validate_cleaned_dataset, validate_csv_upload, validate_dataset_size,
+};
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
@@ -96,6 +98,10 @@ pub async fn upload_dataset(
     let (raw_data, summary) = parse_csv_summary(&dataset_id, &filename, &bytes)
         .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(e)))?;
 
+    // SR-1 / QA-5: reject datasets too small to be used for ML before storing them
+    validate_dataset_size(summary.total_rows, summary.total_columns)
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(e)))?;
+
     // In-memory session buffer (SASD 3.1)
     {
         let mut raw_lock = state.raw_datasets.write().unwrap();
@@ -151,6 +157,10 @@ pub async fn preprocess_dataset(
     let (cleaned_dto, response) =
         clean_and_impute(&raw_data, &payload).map_err(|e| (StatusCode::BAD_REQUEST, Json(e)))?;
 
+    // SR-1 / QA-2: never hand Portion 2 & 3 a dataset that cleaning has made unusable
+    validate_cleaned_dataset(&cleaned_dto)
+        .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(e)))?;
+
     {
         let mut cleaned_lock = state.cleaned_datasets.write().unwrap();
         cleaned_lock.insert(dataset_id, cleaned_dto);
@@ -177,6 +187,9 @@ pub async fn get_cleaned_data(
                 trim_whitespace: true,
             };
             if let Ok((cleaned_dto, _)) = clean_and_impute(raw, &empty_req) {
+                // SR-1: the same checks apply when preprocessing was skipped
+                validate_cleaned_dataset(&cleaned_dto)
+                    .map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, Json(e)))?;
                 return Ok(Json(cleaned_dto));
             }
         }
