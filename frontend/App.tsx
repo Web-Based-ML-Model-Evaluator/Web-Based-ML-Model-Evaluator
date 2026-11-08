@@ -76,7 +76,7 @@ export const App: React.FC = () => {
     if (schema?.column_summaries) {
       const typesMap: Record<string, string> = {};
       schema.column_summaries.forEach((col: any) => {
-        typesMap[col.name] = col.inferred_type === 'numeric' ? 'Numeric' : 'Categorical';
+        typesMap[col.name] = String(col.inferred_type).toLowerCase() === 'numeric' ? 'Numeric' : 'Categorical';
       });
       setColumnTypes(typesMap);
     }
