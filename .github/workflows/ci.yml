@@ -33,9 +33,9 @@ jobs:
 
       - name: Verify Security & Error Handling tests (Issue #16 & #17)
         run: |
-          cargo test -p portion1_data_ingestion_preprocessing --test ingestion_tests test_in_memory_buffer_purge test_error_message_sanitization_no_leak
-          cargo test -p portion2_task_routing_configuration --test routing_tests test_structured_error_format_fr13
-          cargo test -p portion3_model_execution_evaluation --test execution_tests test_session_buffer_purge_sec1_sec3 test_structured_error_responses_fr13
+          cargo test -p portion1_data_ingestion_preprocessing --test ingestion_tests
+          cargo test -p portion2_task_routing_configuration --test routing_tests
+          cargo test -p portion3_model_execution_evaluation --test execution_tests
 
       - name: Code formatting check (rustfmt)
         run: cargo fmt --all -- --check
