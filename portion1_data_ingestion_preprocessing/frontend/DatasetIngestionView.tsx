@@ -71,7 +71,7 @@ const NUMERIC_STRATEGIES = ['mean', 'median', 'mode', 'constant', 'drop_rows_wit
 const CATEGORICAL_STRATEGIES = ['mode', 'constant', 'drop_rows_with_null', 'drop_column'];
 
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
-  onDatasetReady: _onDatasetReady,
+  onDatasetReady,
   apiBaseUrl = 'http://localhost:8001',
 }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -217,6 +217,19 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
       setProcessing(false);
     }
   };
+
+  // Hand the dataset to Portion 2
+  const handleContinue = () => {
+    if (!uploadResult || !onDatasetReady) return;
+    onDatasetReady(uploadResult.dataset_id, {
+      column_names: uploadResult.column_names,
+      column_summaries: uploadResult.column_summaries,
+      total_rows: uploadResult.total_rows,
+      preprocessed: false,
+    });
+  };
+
+  const canContinue = !!uploadResult && !processing;
 
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
@@ -481,6 +494,28 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
           </div>
         )}
       </section>
+
+      {/* Hand-off to Step 2 (Portion 2: Task Routing) */}
+      {onDatasetReady && uploadResult && (
+        <div style={{ marginTop: '24px', textAlign: 'right' }}>
+          <button
+            onClick={handleContinue}
+            disabled={!canContinue}
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              opacity: canContinue ? 1 : 0.6,
+              cursor: canContinue ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Continue to Task Configuration →
+          </button>
+        </div>
+      )}
     </div>
   );
 };
