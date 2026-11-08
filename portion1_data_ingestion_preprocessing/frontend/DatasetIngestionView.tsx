@@ -218,14 +218,17 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     }
   };
 
-  // Hand the dataset to Portion 2
+  // Hand the dataset to Portion 2. If it was preprocessed, only the columns that
+  // survived cleaning are passed on (dropped columns can't be picked as features).
   const handleContinue = () => {
     if (!uploadResult || !onDatasetReady) return;
+    const columnNames = preprocessResult ? preprocessResult.remaining_columns : uploadResult.column_names;
+    const kept = new Set(columnNames);
     onDatasetReady(uploadResult.dataset_id, {
-      column_names: uploadResult.column_names,
-      column_summaries: uploadResult.column_summaries,
-      total_rows: uploadResult.total_rows,
-      preprocessed: false,
+      column_names: columnNames,
+      column_summaries: uploadResult.column_summaries.filter((c) => kept.has(c.name)),
+      total_rows: preprocessResult ? preprocessResult.cleaned_rows : uploadResult.total_rows,
+      preprocessed: preprocessResult !== null,
     });
   };
 
