@@ -213,6 +213,20 @@ pub async fn get_schema(
     State(state): State<AppState>,
     Path(dataset_id): Path<String>,
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<StandardErrorResponse>)> {
+    // After preprocessing, describe the cleaned data so dropped columns are not offered downstream
+    {
+        let cleaned_lock = state.cleaned_datasets.read().unwrap();
+        if let Some(cleaned) = cleaned_lock.get(&dataset_id) {
+            return Ok(Json(serde_json::json!({
+                "dataset_id": dataset_id,
+                "total_rows": cleaned.total_rows,
+                "columns": cleaned.columns,
+                "data_types": cleaned.data_types,
+                "preprocessed": true
+            })));
+        }
+    }
+
     let summary_lock = state.upload_summaries.read().unwrap();
     if let Some(summary) = summary_lock.get(&dataset_id) {
         let types: HashMap<String, String> = summary
@@ -225,7 +239,8 @@ pub async fn get_schema(
             "dataset_id": dataset_id,
             "total_rows": summary.total_rows,
             "columns": summary.column_names,
-            "data_types": types
+            "data_types": types,
+            "preprocessed": false
         })))
     } else {
         Err((
