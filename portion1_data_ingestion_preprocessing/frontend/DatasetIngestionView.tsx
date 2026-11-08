@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 
 // ============================================================================
-// PORTION 1: DATA INGESTION & PREPROCESSING SKELETON
-// Assigned Teammate: Sneha Ajith (PES2UG24CS480)
+// PORTION 1: DATA INGESTION & PREPROCESSING
+// Assigned Teammate: Shreya Ajith (PES2UG24CS480)
 // Scope: FR-1 (Upload), FR-2 (Preview & Summary), FR-3 (Preprocessing & Missing Values)
 // ============================================================================
 
@@ -215,7 +215,7 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
       <header style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '24px' }}>
         <h2 style={{ margin: 0, color: '#1e293b' }}>Portion 1: Data Ingestion & Preprocessing</h2>
         <p style={{ margin: '4px 0 0', color: '#64748b' }}>
-          Assigned to: <strong>Sneha Ajith (PES2UG24CS480)</strong> | Service Port: <strong>8001</strong>
+          Assigned to: <strong>Shreya Ajith (PES2UG24CS480)</strong> | Service Port: <strong>8001</strong>
         </p>
       </header>
 

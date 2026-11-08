@@ -27,7 +27,7 @@ pub async fn health_check() -> impl IntoResponse {
     Json(serde_json::json!({
         "status": "healthy",
         "service": "portion1_data_ingestion_preprocessing",
-        "owner": "Sneha Ajith (PES2UG24CS480)",
+        "owner": "Shreya Ajith (PES2UG24CS480)",
         "port": 8001
     }))
 }

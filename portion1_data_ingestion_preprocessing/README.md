@@ -1,6 +1,6 @@
 # Portion 1: Data Ingestion and Preprocessing Module
 
-**Assigned Developer:** Sneha Ajith (PES2UG24CS480)  
+**Assigned Developer:** Shreya Ajith (PES2UG24CS480)  
 **Assigned Functional Requirements:** FR-1 (Dataset Upload), FR-2 (Dataset Preview), FR-3 (Dataset Preprocessing & Missing Values)  
 **Assigned Non-Functional Requirements:** NFR-1 (Pipeline latency < 30s), NFR-4 (Strict 10MB file limit)  
 **Backend Framework:** Rust (Axum, CSV, Tokio, Serde)  
@@ -13,13 +13,13 @@
 This module is the entrypoint to the Web Based ML Model Evaluator pipeline. It handles raw CSV file uploads, enforces security and size boundaries (<10MB), computes statistical dataset previews, executes missing value imputation, and provides the cleaned dataset representation to downstream modules.
 
 ### How Isolation is Maintained:
-- **Zero Downstream Dependency:** Sneha does **not** depend on Portion 2 (Satvik) or Portion 3 (Shreya) running. This service operates completely standalone on port `8001`.
+- **Zero Downstream Dependency:** Shreya Ajith does **not** depend on Portion 2 (Satvik) or Portion 3 (Shreya) running. This service operates completely standalone on port `8001`.
 - **Standardized Data Contract:** Outputs cleaned data conforming strictly to `CleanedDatasetDTO` specified in `contracts/unified_api_contract.json`.
 - **Mock Mode:** The TSX UI includes an offline mock mode so UI work can proceed even when the Rust backend is compiling.
 
 ---
 
-## 2. API Endpoints Owned by Sneha
+## 2. API Endpoints Owned by Shreya Ajith
 
 ### `POST /api/v1/datasets/upload`
 - **Description:** Ingests a raw CSV file via multipart form-data.

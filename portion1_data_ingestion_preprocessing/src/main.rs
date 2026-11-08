@@ -53,7 +53,7 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], port));
     println!("============================================================");
     println!(" PORTION 1: DATA INGESTION & PREPROCESSING SERVICE");
-    println!(" Assigned Owner: Sneha Ajith (PES2UG24CS480)");
+    println!(" Assigned Owner: Shreya Ajith (PES2UG24CS480)");
     println!(" Listening on: http://localhost:{}", port);
     println!(" Health Check: http://localhost:{}/health", port);
     println!(
