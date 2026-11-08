@@ -56,6 +56,9 @@ const STRATEGY_LABELS: Record<string, string> = {
   drop_rows_with_null: 'Drop rows with a missing value',
   drop_column: 'Drop this column',
 };
+// SR-1: values the server treats as missing, so they can't be used as a fill-in constant
+const MISSING_MARKERS = ['', 'na', 'n/a', 'nan', 'null', 'none'];
+
 const NUMERIC_STRATEGIES = ['mean', 'median', 'mode', 'constant', 'drop_rows_with_null', 'drop_column'];
 const CATEGORICAL_STRATEGIES = ['mode', 'constant', 'drop_rows_with_null', 'drop_column'];
 
@@ -159,14 +162,25 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
       if (!choice) continue; // "Leave as is"
       if (choice === 'constant') {
         const value = (constants[col] ?? '').trim();
-        if (value === '') {
-          setPreprocessError(`Enter a constant value for column "${col}".`);
+        if (MISSING_MARKERS.includes(value.toLowerCase())) {
+          setPreprocessError(`Enter a real constant value for column "${col}" (not blank or "NA").`);
           return;
         }
         imputation_rules[col] = { constant: value };
       } else {
         imputation_rules[col] = choice;
       }
+    }
+
+    // SR-1 / QA-5: a column with no values at all can't be used downstream, so it must be dropped
+    const emptyColumns = uploadResult.column_summaries
+      .filter((c) => c.missing_count === uploadResult.total_rows && rules[c.name] !== 'drop_column')
+      .map((c) => c.name);
+    if (emptyColumns.length > 0) {
+      setPreprocessError(
+        `These columns have no values at all: ${emptyColumns.join(', ')}. Choose "Drop this column" for them.`,
+      );
+      return;
     }
 
     setProcessing(true);
@@ -350,7 +364,12 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
                       <tr key={col.name}>
                         <td style={tdStyle}>{col.name}</td>
                         <td style={tdStyle}>{col.inferred_type}</td>
-                        <td style={tdStyle}>{col.missing_count}</td>
+                        <td style={tdStyle}>
+                          {col.missing_count}
+                          {col.missing_count === uploadResult.total_rows && (
+                            <span style={{ color: '#dc2626', marginLeft: '6px' }}>(all empty: drop it)</span>
+                          )}
+                        </td>
                         <td style={tdStyle}>
                           <select
                             value={choice}
