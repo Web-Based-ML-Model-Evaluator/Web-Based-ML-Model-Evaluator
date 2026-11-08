@@ -73,7 +73,12 @@ fn project_pca_2d_checked(
     }
     let centered: Vec<Vec<f64>> = features
         .iter()
-        .map(|row| row.iter().zip(&means).map(|(value, mean)| value - mean).collect())
+        .map(|row| {
+            row.iter()
+                .zip(&means)
+                .map(|(value, mean)| value - mean)
+                .collect()
+        })
         .collect();
     if centered.iter().flatten().any(|value| !value.is_finite()) {
         return Err(MlError::InvalidInput(
@@ -106,7 +111,12 @@ fn project_pca_2d_checked(
     for (sample_id, (row, &cluster)) in centered.iter().zip(assignments).enumerate() {
         let project = |component: Option<&Vec<f64>>| {
             component
-                .map(|axis| row.iter().zip(axis).map(|(value, weight)| value * weight).sum())
+                .map(|axis| {
+                    row.iter()
+                        .zip(axis)
+                        .map(|(value, weight)| value * weight)
+                        .sum()
+                })
                 .unwrap_or(0.0)
         };
         let x = project(components.first());
@@ -134,7 +144,10 @@ fn symmetric_eigenvectors(matrix: &[Vec<f64>]) -> Result<Vec<Vec<f64>>, MlError>
         row[index] = 1.0;
     }
 
-    let max_iterations = dimensions.saturating_mul(dimensions).saturating_mul(100).max(1);
+    let max_iterations = dimensions
+        .saturating_mul(dimensions)
+        .saturating_mul(100)
+        .max(1);
     for _ in 0..max_iterations {
         let mut largest = 0.0_f64;
         let mut pivot = (0, 0);
@@ -251,10 +264,8 @@ pub fn try_run_kmeans(
             row.len(),
         )));
     }
-    if let Some((row_index, column_index, value)) = features
-        .iter()
-        .enumerate()
-        .find_map(|(row_index, row)| {
+    if let Some((row_index, column_index, value)) =
+        features.iter().enumerate().find_map(|(row_index, row)| {
             row.iter()
                 .enumerate()
                 .find(|(_, value)| !value.is_finite())
@@ -299,8 +310,7 @@ pub fn try_run_kmeans(
             .collect();
         let total_distance = distances.iter().sum::<f64>();
         let next_index = if total_distance.is_finite() && total_distance > 0.0 {
-            let threshold =
-                (next_random() as f64 / u64::MAX as f64) * total_distance;
+            let threshold = (next_random() as f64 / u64::MAX as f64) * total_distance;
             let mut cumulative = 0.0;
             distances
                 .iter()
@@ -516,24 +526,45 @@ fn standardize(train: &[Vec<f64>], test: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec
 }
 
 /// Shared checks: non-empty train/test, consistent row widths, finite numbers.
-fn validate_matrices(x_train: &[Vec<f64>], n_labels: usize, x_test: &[Vec<f64>]) -> Result<(), MlError> {
+fn validate_matrices(
+    x_train: &[Vec<f64>],
+    n_labels: usize,
+    x_test: &[Vec<f64>],
+) -> Result<(), MlError> {
     if x_train.is_empty() {
         return Err(MlError::InvalidInput(
             "The training set is empty. Use a smaller test split or a larger dataset.".into(),
         ));
     }
     if x_train.len() != n_labels {
-        return Err(MlError::InvalidInput("Features and target have different lengths.".into()));
+        return Err(MlError::InvalidInput(
+            "Features and target have different lengths.".into(),
+        ));
     }
     let width = x_train[0].len();
     if width == 0 {
-        return Err(MlError::InvalidInput("Select at least one feature column.".into()));
+        return Err(MlError::InvalidInput(
+            "Select at least one feature column.".into(),
+        ));
     }
-    if x_train.iter().chain(x_test.iter()).any(|r| r.len() != width) {
-        return Err(MlError::InvalidInput("All rows must have the same number of features.".into()));
+    if x_train
+        .iter()
+        .chain(x_test.iter())
+        .any(|r| r.len() != width)
+    {
+        return Err(MlError::InvalidInput(
+            "All rows must have the same number of features.".into(),
+        ));
     }
-    if x_train.iter().chain(x_test.iter()).flatten().any(|v| !v.is_finite()) {
-        return Err(MlError::InvalidInput("Features contain NaN or infinite values.".into()));
+    if x_train
+        .iter()
+        .chain(x_test.iter())
+        .flatten()
+        .any(|v| !v.is_finite())
+    {
+        return Err(MlError::InvalidInput(
+            "Features contain NaN or infinite values.".into(),
+        ));
     }
     Ok(())
 }
@@ -576,7 +607,12 @@ pub fn try_run_classification_model(
     validate_matrices(x_train, y_train.len(), x_test)?;
 
     // class labels <-> indices (sorted so results are stable)
-    let mut classes: Vec<String> = y_train.iter().cloned().collect::<HashSet<_>>().into_iter().collect();
+    let mut classes: Vec<String> = y_train
+        .iter()
+        .cloned()
+        .collect::<HashSet<_>>()
+        .into_iter()
+        .collect();
     classes.sort();
     if classes.len() < 2 {
         return Err(MlError::InvalidInput(
@@ -588,7 +624,12 @@ pub fn try_run_classification_model(
     }
     let y_idx: Vec<usize> = y_train
         .iter()
-        .map(|l| classes.iter().position(|c| c == l).expect("label is in classes"))
+        .map(|l| {
+            classes
+                .iter()
+                .position(|c| c == l)
+                .expect("label is in classes")
+        })
         .collect();
 
     let (tr, te) = standardize(x_train, x_test);
@@ -602,18 +643,24 @@ pub fn try_run_classification_model(
                     .predict(&xte)
                     .map_err(internal)?
             }
-            ClassifierAlgo::DecisionTree => {
-                DecisionTreeClassifier::fit(&xtr, &y_idx, DecisionTreeClassifierParameters::default())
-                    .map_err(internal)?
-                    .predict(&xte)
-                    .map_err(internal)?
-            }
+            ClassifierAlgo::DecisionTree => DecisionTreeClassifier::fit(
+                &xtr,
+                &y_idx,
+                DecisionTreeClassifierParameters::default(),
+            )
+            .map_err(internal)?
+            .predict(&xte)
+            .map_err(internal)?,
             ClassifierAlgo::RandomForest => {
                 // default seed is fixed, so results are reproducible
-                RandomForestClassifier::fit(&xtr, &y_idx, RandomForestClassifierParameters::default())
-                    .map_err(internal)?
-                    .predict(&xte)
-                    .map_err(internal)?
+                RandomForestClassifier::fit(
+                    &xtr,
+                    &y_idx,
+                    RandomForestClassifierParameters::default(),
+                )
+                .map_err(internal)?
+                .predict(&xte)
+                .map_err(internal)?
             }
             ClassifierAlgo::Knn => {
                 // k = 3 (or fewer when the training set is tiny), Euclidean distance
@@ -656,7 +703,9 @@ pub fn try_run_regression_model(
     let algo = parse_regressor(algorithm)?;
     validate_matrices(x_train, y_train.len(), x_test)?;
     if y_train.iter().any(|v| !v.is_finite()) {
-        return Err(MlError::InvalidInput("The target column contains NaN or infinite values.".into()));
+        return Err(MlError::InvalidInput(
+            "The target column contains NaN or infinite values.".into(),
+        ));
     }
     if x_test.is_empty() {
         return Ok(vec![]);
@@ -730,7 +779,11 @@ mod supervised_tests {
             "K-Nearest Neighbors (KNN)",
         ] {
             let (actual, pred) = run_clf(algo, 0.25).unwrap_or_else(|e| panic!("{algo}: {e}"));
-            assert_eq!(pred.len(), actual.len(), "{algo}: one prediction per test row");
+            assert_eq!(
+                pred.len(),
+                actual.len(),
+                "{algo}: one prediction per test row"
+            );
             let m = compute_classification_metrics(&actual, &pred);
             // Only 5 test rows and 3 virginica rows in training, so this is a sanity floor
             // (chance is 0.33), not a quality bar. Exactness is checked by the oracle test below.
@@ -744,10 +797,7 @@ mod supervised_tests {
         use super::*;
 
         fn close(actual: f64, expected: f64) {
-            assert!(
-                (actual - expected).abs() < 1e-9,
-                "{actual} != {expected}"
-            );
+            assert!((actual - expected).abs() < 1e-9, "{actual} != {expected}");
         }
 
         #[test]
@@ -767,9 +817,10 @@ mod supervised_tests {
                 assert_eq!(point.sample_id, index);
                 assert_eq!(point.cluster, assignments[index]);
             }
-            for (point, (expected_x, expected_y)) in points
-                .iter()
-                .zip([(-2.0, 0.0), (2.0, 0.0), (0.0, -1.0), (0.0, 1.0)])
+            for (point, (expected_x, expected_y)) in
+                points
+                    .iter()
+                    .zip([(-2.0, 0.0), (2.0, 0.0), (0.0, -1.0), (0.0, 1.0)])
             {
                 close(point.x, expected_x);
                 close(point.y, expected_y);
@@ -970,11 +1021,8 @@ mod supervised_tests {
                 MlError::InvalidInput("Row 2 has 2 features; expected 1.".into())
             );
             assert_eq!(
-                try_run_kmeans(&[vec![0.0, f64::NAN], vec![1.0, 2.0]], 1, 10)
-                    .unwrap_err(),
-                MlError::InvalidInput(
-                    "Feature at row 1, column 2 is not finite (NaN).".into()
-                )
+                try_run_kmeans(&[vec![0.0, f64::NAN], vec![1.0, 2.0]], 1, 10).unwrap_err(),
+                MlError::InvalidInput("Feature at row 1, column 2 is not finite (NaN).".into())
             );
         }
     }
@@ -996,7 +1044,16 @@ mod supervised_tests {
                 let mut d: Vec<(f64, &String)> = tr
                     .iter()
                     .zip(&ytr)
-                    .map(|(r, l)| (r.iter().zip(q).map(|(a, b)| (a - b).powi(2)).sum::<f64>().sqrt(), l))
+                    .map(|(r, l)| {
+                        (
+                            r.iter()
+                                .zip(q)
+                                .map(|(a, b)| (a - b).powi(2))
+                                .sum::<f64>()
+                                .sqrt(),
+                            l,
+                        )
+                    })
                     .collect();
                 d.sort_by(|a, b| a.0.total_cmp(&b.0));
                 let mut votes: std::collections::BTreeMap<&String, usize> = Default::default();
@@ -1004,7 +1061,12 @@ mod supervised_tests {
                     *votes.entry(l).or_default() += 1;
                 }
                 let best = votes.values().copied().max().unwrap();
-                votes.into_iter().find(|(_, c)| *c == best).unwrap().0.clone()
+                votes
+                    .into_iter()
+                    .find(|(_, c)| *c == best)
+                    .unwrap()
+                    .0
+                    .clone()
             })
             .collect();
         assert_eq!(ours, oracle);
@@ -1013,37 +1075,82 @@ mod supervised_tests {
     #[test]
     fn predictions_only_use_labels_seen_in_training() {
         let (_, pred) = run_clf("Random Forest Classifier", 0.25).unwrap();
-        assert!(pred.iter().all(|p| ["setosa", "versicolor", "virginica"].contains(&p.as_str())));
+        assert!(pred
+            .iter()
+            .all(|p| ["setosa", "versicolor", "virginica"].contains(&p.as_str())));
     }
 
     #[test]
     fn classifier_results_are_deterministic() {
-        for algo in ["Random Forest Classifier", "Decision Tree Classifier", "K-Nearest Neighbors (KNN)"] {
-            assert_eq!(run_clf(algo, 0.25).unwrap(), run_clf(algo, 0.25).unwrap(), "{algo}");
+        for algo in [
+            "Random Forest Classifier",
+            "Decision Tree Classifier",
+            "K-Nearest Neighbors (KNN)",
+        ] {
+            assert_eq!(
+                run_clf(algo, 0.25).unwrap(),
+                run_clf(algo, 0.25).unwrap(),
+                "{algo}"
+            );
         }
     }
 
     #[test]
     fn algorithm_names_are_forgiving() {
-        for name in ["knn", "KNN", "k-nearest-neighbors", "K-Nearest Neighbors (KNN)", "  K Nearest Neighbours "] {
+        for name in [
+            "knn",
+            "KNN",
+            "k-nearest-neighbors",
+            "K-Nearest Neighbors (KNN)",
+            "  K Nearest Neighbours ",
+        ] {
             assert_eq!(parse_classifier(name), Ok(ClassifierAlgo::Knn), "{name}");
         }
-        assert_eq!(parse_classifier("random_forest"), Ok(ClassifierAlgo::RandomForest));
-        assert_eq!(parse_classifier("Decision Tree"), Ok(ClassifierAlgo::DecisionTree));
-        assert_eq!(parse_classifier("logistic regression"), Ok(ClassifierAlgo::LogisticRegression));
-        assert_eq!(parse_regressor("Linear Regression"), Ok(RegressorAlgo::LinearRegression));
-        assert_eq!(parse_regressor("Decision Tree Regressor"), Ok(RegressorAlgo::DecisionTree));
-        assert_eq!(parse_regressor("random forest regressor"), Ok(RegressorAlgo::RandomForest));
+        assert_eq!(
+            parse_classifier("random_forest"),
+            Ok(ClassifierAlgo::RandomForest)
+        );
+        assert_eq!(
+            parse_classifier("Decision Tree"),
+            Ok(ClassifierAlgo::DecisionTree)
+        );
+        assert_eq!(
+            parse_classifier("logistic regression"),
+            Ok(ClassifierAlgo::LogisticRegression)
+        );
+        assert_eq!(
+            parse_regressor("Linear Regression"),
+            Ok(RegressorAlgo::LinearRegression)
+        );
+        assert_eq!(
+            parse_regressor("Decision Tree Regressor"),
+            Ok(RegressorAlgo::DecisionTree)
+        );
+        assert_eq!(
+            parse_regressor("random forest regressor"),
+            Ok(RegressorAlgo::RandomForest)
+        );
     }
 
     #[test]
     fn unknown_or_wrong_task_algorithm_is_rejected() {
-        assert!(matches!(run_clf("Neural Network", 0.25), Err(MlError::UnsupportedAlgorithm(_))));
+        assert!(matches!(
+            run_clf("Neural Network", 0.25),
+            Err(MlError::UnsupportedAlgorithm(_))
+        ));
         // a regression-only algorithm for classification, and vice versa
-        assert!(matches!(run_clf("Linear Regression", 0.25), Err(MlError::UnsupportedAlgorithm(_))));
+        assert!(matches!(
+            run_clf("Linear Regression", 0.25),
+            Err(MlError::UnsupportedAlgorithm(_))
+        ));
         let r = try_run_regression_model("Logistic Regression", &[vec![1.0]], &[1.0], &[vec![1.0]]);
         assert!(matches!(r, Err(MlError::UnsupportedAlgorithm(_))));
-        let r = try_run_regression_model("K-Nearest Neighbors (KNN)", &[vec![1.0]], &[1.0], &[vec![1.0]]);
+        let r = try_run_regression_model(
+            "K-Nearest Neighbors (KNN)",
+            &[vec![1.0]],
+            &[1.0],
+            &[vec![1.0]],
+        );
         assert!(matches!(r, Err(MlError::UnsupportedAlgorithm(_))));
     }
 
@@ -1052,28 +1159,56 @@ mod supervised_tests {
         let x = vec![vec![1.0], vec![2.0], vec![3.0]];
         let y: Vec<String> = ["a", "b", "a"].iter().map(|s| s.to_string()).collect();
         // empty training set
-        assert!(matches!(try_run_classification_model("KNN", &[], &[], &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("KNN", &[], &[], &x),
+            Err(MlError::InvalidInput(_))
+        ));
         // length mismatch
-        assert!(matches!(try_run_classification_model("KNN", &x, &y[..2], &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("KNN", &x, &y[..2], &x),
+            Err(MlError::InvalidInput(_))
+        ));
         // single class in training data
         let one: Vec<String> = vec!["a".into(); 3];
-        assert!(matches!(try_run_classification_model("Logistic Regression", &x, &one, &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("Logistic Regression", &x, &one, &x),
+            Err(MlError::InvalidInput(_))
+        ));
         // ragged rows
         let ragged = vec![vec![1.0], vec![2.0, 3.0], vec![4.0]];
-        assert!(matches!(try_run_classification_model("KNN", &ragged, &y, &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("KNN", &ragged, &y, &x),
+            Err(MlError::InvalidInput(_))
+        ));
         // NaN feature
         let nan = vec![vec![f64::NAN], vec![2.0], vec![3.0]];
-        assert!(matches!(try_run_classification_model("KNN", &nan, &y, &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("KNN", &nan, &y, &x),
+            Err(MlError::InvalidInput(_))
+        ));
         // no feature columns
         let none = vec![vec![], vec![], vec![]];
-        assert!(matches!(try_run_classification_model("KNN", &none, &y, &none), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_classification_model("KNN", &none, &y, &none),
+            Err(MlError::InvalidInput(_))
+        ));
     }
 
     #[test]
     fn tiny_train_set_and_zero_variance_column_do_not_crash() {
-        let x = vec![vec![1.0, 5.0], vec![2.0, 5.0], vec![9.0, 5.0], vec![10.0, 5.0]];
+        let x = vec![
+            vec![1.0, 5.0],
+            vec![2.0, 5.0],
+            vec![9.0, 5.0],
+            vec![10.0, 5.0],
+        ];
         let y: Vec<String> = ["a", "a", "b", "b"].iter().map(|s| s.to_string()).collect();
-        for algo in ["Logistic Regression", "Decision Tree", "Random Forest", "KNN"] {
+        for algo in [
+            "Logistic Regression",
+            "Decision Tree",
+            "Random Forest",
+            "KNN",
+        ] {
             let p = try_run_classification_model(algo, &x, &y, &[vec![1.5, 5.0], vec![9.5, 5.0]])
                 .unwrap_or_else(|e| panic!("{algo}: {e}"));
             assert_eq!(p.len(), 2, "{algo}");
@@ -1083,7 +1218,10 @@ mod supervised_tests {
     #[test]
     fn empty_test_set_returns_empty_predictions() {
         let (x, y) = iris();
-        assert_eq!(try_run_classification_model("KNN", &x, &y, &[]).unwrap(), Vec::<String>::new());
+        assert_eq!(
+            try_run_classification_model("KNN", &x, &y, &[]).unwrap(),
+            Vec::<String>::new()
+        );
     }
 
     // ---- regression -------------------------------------------------------
@@ -1119,7 +1257,8 @@ mod supervised_tests {
             ("Decision Tree Regressor", 0.85),
             ("Random Forest Regressor", 0.90),
         ] {
-            let pred = try_run_regression_model(algo, &xtr, &ytr, &xte).unwrap_or_else(|e| panic!("{algo}: {e}"));
+            let pred = try_run_regression_model(algo, &xtr, &ytr, &xte)
+                .unwrap_or_else(|e| panic!("{algo}: {e}"));
             assert_eq!(pred.len(), yte.len(), "{algo}");
             let score = r2(&yte, &pred);
             assert!(score >= min_r2, "{algo}: R2 {score} below {min_r2}");
@@ -1129,8 +1268,14 @@ mod supervised_tests {
     #[test]
     fn regression_rejects_bad_input() {
         let x = vec![vec![1.0], vec![2.0]];
-        assert!(matches!(try_run_regression_model("Linear Regression", &[], &[], &x), Err(MlError::InvalidInput(_))));
-        assert!(matches!(try_run_regression_model("Linear Regression", &x, &[1.0], &x), Err(MlError::InvalidInput(_))));
+        assert!(matches!(
+            try_run_regression_model("Linear Regression", &[], &[], &x),
+            Err(MlError::InvalidInput(_))
+        ));
+        assert!(matches!(
+            try_run_regression_model("Linear Regression", &x, &[1.0], &x),
+            Err(MlError::InvalidInput(_))
+        ));
         assert!(matches!(
             try_run_regression_model("Linear Regression", &x, &[1.0, f64::NAN], &x),
             Err(MlError::InvalidInput(_))

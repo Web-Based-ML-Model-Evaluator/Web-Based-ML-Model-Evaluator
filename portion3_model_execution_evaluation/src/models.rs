@@ -1,4 +1,4 @@
-﻿use chrono::{DateTime, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -58,8 +58,8 @@ pub struct ClassificationMetrics {
 /// Regression performance metrics (FR-10)
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct RegressionMetrics {
-    pub mean_absolute_error: f64, // MAE
-    pub mean_squared_error: f64,  // MSE
+    pub mean_absolute_error: f64,     // MAE
+    pub mean_squared_error: f64,      // MSE
     pub root_mean_squared_error: f64, // RMSE
     pub r2_score: f64,
 }

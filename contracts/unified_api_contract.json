@@ -39,6 +39,18 @@
           "path": "/api/v1/datasets/{dataset_id}/schema",
           "summary": "Internal API: Retrieve column names and data types",
           "produces": "application/json"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/datasets/{dataset_id}",
+          "summary": "Securely purge dataset from in-memory session buffer (SEC-1, SEC-3)",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/session/purge",
+          "summary": "Securely purge all datasets from in-memory session buffer (SEC-1, SEC-3)",
+          "produces": "application/json"
         }
       ]
     },
@@ -96,6 +108,18 @@
           "path": "/api/v1/models/compare",
           "summary": "Compare specific model execution runs",
           "consumes": "application/json",
+          "produces": "application/json"
+        },
+        {
+          "method": "DELETE",
+          "path": "/api/v1/models/comparison/{session_id}",
+          "summary": "Securely purge model execution runs for a session (SEC-1, SEC-3)",
+          "produces": "application/json"
+        },
+        {
+          "method": "POST",
+          "path": "/api/v1/models/session/purge",
+          "summary": "Securely purge all model comparison sessions from memory (SEC-1, SEC-3)",
           "produces": "application/json"
         }
       ]

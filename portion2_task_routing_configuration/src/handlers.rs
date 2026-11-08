@@ -170,3 +170,15 @@ pub async fn dispatch_pipeline(
         execution_result: Some(execution_result),
     }))
 }
+
+/// Fallback 404 handler returning standard error format (FR-13, SEC-4)
+pub async fn fallback_404_handler() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        Json(StandardErrorResponse::new(
+            "RESOURCE_NOT_FOUND",
+            "The requested endpoint does not exist on Portion 2 service.",
+            None,
+        )),
+    )
+}

@@ -1,4 +1,4 @@
-﻿use crate::comparison::ComparisonStore;
+use crate::comparison::ComparisonStore;
 use crate::metrics::{
     compute_classification_metrics, compute_clustering_metrics, compute_regression_metrics,
 };
@@ -7,8 +7,7 @@ use crate::ml_algorithms::{
     try_run_regression_model,
 };
 use crate::models::{
-    ExecutionRequest, ExecutionResponse, MetricResults, ModelComparisonEntry,
-    StandardErrorResponse,
+    ExecutionRequest, ExecutionResponse, MetricResults, ModelComparisonEntry, StandardErrorResponse,
 };
 use axum::{
     extract::{Path, State},
@@ -82,7 +81,7 @@ pub async fn execute_model(
                 serde_json::json!({"sepal_length": 6.3, "sepal_width": 3.3, "petal_length": 6.0, "species": "virginica"}),
                 serde_json::json!({"sepal_length": 5.8, "sepal_width": 2.7, "petal_length": 5.1, "species": "virginica"}),
                 serde_json::json!({"sepal_length": 7.1, "sepal_width": 3.0, "petal_length": 5.9, "species": "virginica"}),
-                serde_json::json!({"sepal_length": 7.6, "sepal_width": 3.0, "petal_length": 6.6, "species": "virginica"})
+                serde_json::json!({"sepal_length": 7.6, "sepal_width": 3.0, "petal_length": 6.6, "species": "virginica"}),
             ]
         }
     };
@@ -138,15 +137,20 @@ pub async fn execute_model(
             let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
             let (y_train, y_test) = split_shuffled(&labels, train_samples);
 
-            let predictions = match try_run_classification_model(&req.algorithm, &x_train, &y_train, &x_test) {
-                Ok(p) => p,
-                Err(err) => {
-                    return Err((
-                        StatusCode::BAD_REQUEST,
-                        Json(StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None)),
-                    ));
-                }
-            };
+            let predictions =
+                match try_run_classification_model(&req.algorithm, &x_train, &y_train, &x_test) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            Json(StandardErrorResponse::new(
+                                "TRAINING_FAILED",
+                                &err.message(),
+                                None,
+                            )),
+                        ));
+                    }
+                };
             let class_metrics = compute_classification_metrics(&y_test, &predictions);
 
             let mut summary_map = HashMap::new();
@@ -187,15 +191,20 @@ pub async fn execute_model(
             let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
             let (y_train, y_test) = split_shuffled(&targets, train_samples);
 
-            let predictions = match try_run_regression_model(&req.algorithm, &x_train, &y_train, &x_test) {
-                Ok(p) => p,
-                Err(err) => {
-                    return Err((
-                        StatusCode::BAD_REQUEST,
-                        Json(StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None)),
-                    ));
-                }
-            };
+            let predictions =
+                match try_run_regression_model(&req.algorithm, &x_train, &y_train, &x_test) {
+                    Ok(p) => p,
+                    Err(err) => {
+                        return Err((
+                            StatusCode::BAD_REQUEST,
+                            Json(StandardErrorResponse::new(
+                                "TRAINING_FAILED",
+                                &err.message(),
+                                None,
+                            )),
+                        ));
+                    }
+                };
             let reg_metrics = compute_regression_metrics(&y_test, &predictions);
 
             let mut summary_map = HashMap::new();
@@ -227,7 +236,10 @@ pub async fn execute_model(
 
             let mut summary_map = HashMap::new();
             summary_map.insert("silhouette".to_string(), cluster_metrics.silhouette_score);
-            summary_map.insert("davies_bouldin".to_string(), cluster_metrics.davies_bouldin_index);
+            summary_map.insert(
+                "davies_bouldin".to_string(),
+                cluster_metrics.davies_bouldin_index,
+            );
 
             let comp_entry = ModelComparisonEntry {
                 execution_id: execution_id.clone(),
@@ -303,7 +315,9 @@ pub async fn get_comparison_dashboard(
     Path(session_id): Path<String>,
 ) -> Json<serde_json::Value> {
     let history = state.comparison_store.get_history(&session_id);
-    let runs = if history.is_empty() && (session_id == "all" || session_id == "default" || session_id == "mock") {
+    let runs = if history.is_empty()
+        && (session_id == "all" || session_id == "default" || session_id == "mock")
+    {
         if session_id == "mock" && state.comparison_store.get_all_runs().is_empty() {
             state.comparison_store.seed_mock_runs();
         }
@@ -353,4 +367,39 @@ pub async fn compare_models(
             )),
         )),
     }
+}
+
+/// DELETE /api/v1/models/comparison/{session_id} (SEC-1, SEC-3, SRS 7.3)
+pub async fn purge_session_models(
+    State(state): State<AppState>,
+    Path(session_id): Path<String>,
+) -> Json<serde_json::Value> {
+    let count = state.comparison_store.purge_session(&session_id);
+    Json(serde_json::json!({
+        "status": "SESSION_MODELS_PURGED",
+        "session_id": session_id,
+        "purged_runs_count": count,
+        "message": "Model execution runs purged securely from host memory per SEC-1 and SEC-3."
+    }))
+}
+
+/// POST /api/v1/models/session/purge (SEC-1, SEC-3, SRS 7.3)
+pub async fn purge_all_sessions(State(state): State<AppState>) -> Json<serde_json::Value> {
+    state.comparison_store.clear();
+    Json(serde_json::json!({
+        "status": "ALL_SESSIONS_PURGED",
+        "message": "All session model comparisons purged securely from host memory per SEC-1 and SEC-3."
+    }))
+}
+
+/// Fallback 404 handler returning standard error format (FR-13, SEC-4)
+pub async fn fallback_404_handler() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        Json(StandardErrorResponse::new(
+            "RESOURCE_NOT_FOUND",
+            "The requested endpoint does not exist on Portion 3 service.",
+            None,
+        )),
+    )
 }

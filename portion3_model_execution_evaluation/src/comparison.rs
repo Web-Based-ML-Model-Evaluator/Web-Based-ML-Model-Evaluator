@@ -40,7 +40,10 @@ impl ComparisonStore {
         let mut map = self.history.write().unwrap();
         let list = map.entry(entry.dataset_id.clone()).or_insert_with(Vec::new);
         // Avoid duplicate entries if executed with the same ID
-        if let Some(pos) = list.iter().position(|e| e.execution_id == entry.execution_id) {
+        if let Some(pos) = list
+            .iter()
+            .position(|e| e.execution_id == entry.execution_id)
+        {
             list[pos] = entry;
         } else {
             list.push(entry);
@@ -87,7 +90,9 @@ impl ComparisonStore {
         for runs in map.values() {
             for r in runs {
                 if execution_ids.contains(&r.execution_id)
-                    && !results.iter().any(|existing: &ModelComparisonEntry| existing.execution_id == r.execution_id)
+                    && !results.iter().any(|existing: &ModelComparisonEntry| {
+                        existing.execution_id == r.execution_id
+                    })
                 {
                     results.push(r.clone());
                 }
@@ -97,7 +102,10 @@ impl ComparisonStore {
     }
 
     /// Compares two or more trained models side-by-side, determining the optimal model and rankings (FR-12, BR-7)
-    pub fn build_comparison_report(&self, execution_ids: &[String]) -> Result<ComparisonReport, String> {
+    pub fn build_comparison_report(
+        &self,
+        execution_ids: &[String],
+    ) -> Result<ComparisonReport, String> {
         if execution_ids.len() < 2 {
             return Err("Model comparison requires at least two trained models side-by-side (FR-12 / BR-7).".to_string());
         }
@@ -105,7 +113,10 @@ impl ComparisonStore {
         let mut found_models: Vec<ModelComparisonEntry> = Vec::new();
         for id in execution_ids {
             if let Some(entry) = self.get_run_by_id(id) {
-                if !found_models.iter().any(|m| m.execution_id == entry.execution_id) {
+                if !found_models
+                    .iter()
+                    .any(|m| m.execution_id == entry.execution_id)
+                {
                     found_models.push(entry);
                 }
             }
@@ -139,8 +150,18 @@ impl ComparisonStore {
                 .0
                 .partial_cmp(&score_a.0)
                 .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| score_b.1.partial_cmp(&score_a.1).unwrap_or(std::cmp::Ordering::Equal))
-                .then_with(|| score_b.2.partial_cmp(&score_a.2).unwrap_or(std::cmp::Ordering::Equal))
+                .then_with(|| {
+                    score_b
+                        .1
+                        .partial_cmp(&score_a.1)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
+                .then_with(|| {
+                    score_b
+                        .2
+                        .partial_cmp(&score_a.2)
+                        .unwrap_or(std::cmp::Ordering::Equal)
+                })
         });
 
         let mut ranking = Vec::new();
@@ -219,10 +240,16 @@ impl ComparisonStore {
         })
     }
 
-    /// Clears all stored runs (used in testing)
+    /// Clears all stored runs (used in testing and session purge per SEC-1, SEC-3)
     pub fn clear(&self) {
         let mut map = self.history.write().unwrap();
         map.clear();
+    }
+
+    /// Purges all runs associated with a given dataset or session ID (SEC-1, SEC-3, SRS 7.3)
+    pub fn purge_session(&self, dataset_id: &str) -> usize {
+        let mut map = self.history.write().unwrap();
+        map.remove(dataset_id).map(|v| v.len()).unwrap_or(0)
     }
 
     /// Seeds realistic mock runs across all 3 tasks to enable standalone offline exploration
@@ -385,7 +412,11 @@ fn score_model_for_comparison(entry: &ModelComparisonEntry, task_type: &str) -> 
                 .get("accuracy")
                 .copied()
                 .unwrap_or(entry.primary_metric_value);
-            let f1 = entry.summary_metrics.get("f1_score").copied().unwrap_or(0.0);
+            let f1 = entry
+                .summary_metrics
+                .get("f1_score")
+                .copied()
+                .unwrap_or(0.0);
             let time_score = -entry.train_time_ms; // Lower training time is preferred
             (acc, f1, time_score)
         }
@@ -431,7 +462,13 @@ fn score_model_for_comparison(entry: &ModelComparisonEntry, task_type: &str) -> 
 mod tests {
     use super::*;
 
-    fn sample_clf_entry(id: &str, algo: &str, acc: f64, f1: f64, time: f64) -> ModelComparisonEntry {
+    fn sample_clf_entry(
+        id: &str,
+        algo: &str,
+        acc: f64,
+        f1: f64,
+        time: f64,
+    ) -> ModelComparisonEntry {
         let mut map = HashMap::new();
         map.insert("accuracy".to_string(), acc);
         map.insert("f1_score".to_string(), f1);
@@ -496,9 +533,27 @@ mod tests {
     #[test]
     fn test_report_ranks_classification_optimally() {
         let store = ComparisonStore::default();
-        store.record_run(sample_clf_entry("run-dt", "Decision Tree Classifier", 0.85, 0.84, 10.0));
-        store.record_run(sample_clf_entry("run-rf", "Random Forest Classifier", 0.96, 0.95, 35.0));
-        store.record_run(sample_clf_entry("run-knn", "K-Nearest Neighbors", 0.91, 0.90, 20.0));
+        store.record_run(sample_clf_entry(
+            "run-dt",
+            "Decision Tree Classifier",
+            0.85,
+            0.84,
+            10.0,
+        ));
+        store.record_run(sample_clf_entry(
+            "run-rf",
+            "Random Forest Classifier",
+            0.96,
+            0.95,
+            35.0,
+        ));
+        store.record_run(sample_clf_entry(
+            "run-knn",
+            "K-Nearest Neighbors",
+            0.91,
+            0.90,
+            20.0,
+        ));
 
         let report = store
             .build_comparison_report(&[
@@ -517,7 +572,9 @@ mod tests {
         assert_eq!(report.ranking[1].rank, 2);
         assert_eq!(report.ranking[2].execution_id, "run-dt");
         assert_eq!(report.ranking[2].rank, 3);
-        assert!(report.recommendation_reason.contains("Random Forest Classifier"));
+        assert!(report
+            .recommendation_reason
+            .contains("Random Forest Classifier"));
         assert!(report.metrics_table.contains_key("Accuracy"));
         assert!(report.metrics_table.contains_key("train_time_ms"));
     }
@@ -529,5 +586,16 @@ mod tests {
 
         let all = store.get_all_runs();
         assert!(all.len() >= 8); // 4 classification, 3 regression, 1 clustering
+    }
+
+    #[test]
+    fn test_purge_session() {
+        let store = ComparisonStore::default();
+        store.record_run(sample_clf_entry("run-1", "RF", 0.95, 0.94, 30.0));
+        assert_eq!(store.get_history("dataset-test").len(), 1);
+
+        let purged = store.purge_session("dataset-test");
+        assert_eq!(purged, 1);
+        assert!(store.get_history("dataset-test").is_empty());
     }
 }
