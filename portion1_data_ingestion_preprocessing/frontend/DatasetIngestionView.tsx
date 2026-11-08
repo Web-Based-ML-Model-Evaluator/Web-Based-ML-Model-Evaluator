@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 
 // ============================================================================
-// PORTION 1: DATA INGESTION & PREPROCESSING SKELETON
-// Assigned Teammate: Sneha Ajith (PES2UG24CS480)
+// PORTION 1: DATA INGESTION & PREPROCESSING
+// Assigned Teammate: Shreya Ajith (PES2UG24CS480)
 // Scope: FR-1 (Upload), FR-2 (Preview & Summary), FR-3 (Preprocessing & Missing Values)
 // ============================================================================
 
@@ -36,8 +36,16 @@ export interface PreprocessingResponse {
   status: string;
 }
 
+// Schema handed to the next wizard step (Portion 2) once the dataset is ready
+export interface DatasetReadySchema {
+  column_names: string[];
+  column_summaries: ColumnSummary[];
+  total_rows: number;
+  preprocessed: boolean;
+}
+
 export interface DatasetIngestionViewProps {
-  onDatasetReady?: (datasetId: string, schema: any) => void;
+  onDatasetReady?: (datasetId: string, schema: DatasetReadySchema) => void;
   apiBaseUrl?: string;
 }
 
@@ -63,7 +71,7 @@ const NUMERIC_STRATEGIES = ['mean', 'median', 'mode', 'constant', 'drop_rows_wit
 const CATEGORICAL_STRATEGIES = ['mode', 'constant', 'drop_rows_with_null', 'drop_column'];
 
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
-  onDatasetReady: _onDatasetReady,
+  onDatasetReady,
   apiBaseUrl = 'http://localhost:8001',
 }) => {
   const [file, setFile] = useState<File | null>(null);
@@ -210,12 +218,31 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     }
   };
 
+  // Hand the dataset to Portion 2. If it was preprocessed, only the columns that
+  // survived cleaning are passed on (dropped columns can't be picked as features).
+  const handleContinue = () => {
+    if (!uploadResult || !onDatasetReady) return;
+    const columnNames = preprocessResult ? preprocessResult.remaining_columns : uploadResult.column_names;
+    const kept = new Set(columnNames);
+    onDatasetReady(uploadResult.dataset_id, {
+      column_names: columnNames,
+      column_summaries: uploadResult.column_summaries.filter((c) => kept.has(c.name)),
+      total_rows: preprocessResult ? preprocessResult.cleaned_rows : uploadResult.total_rows,
+      preprocessed: preprocessResult !== null,
+    });
+  };
+
+  // Missing values with no rule chosen would reach the models as nulls, so ask the user to
+  // preprocess first. A dataset with no missing values can go straight to Step 2.
+  const hasMissing = (uploadResult?.column_summaries ?? []).some((c) => c.missing_count > 0);
+  const canContinue = !!uploadResult && !processing && (preprocessResult !== null || !hasMissing);
+
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
       <header style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '24px' }}>
         <h2 style={{ margin: 0, color: '#1e293b' }}>Portion 1: Data Ingestion & Preprocessing</h2>
         <p style={{ margin: '4px 0 0', color: '#64748b' }}>
-          Assigned to: <strong>Sneha Ajith (PES2UG24CS480)</strong> | Service Port: <strong>8001</strong>
+          Assigned to: <strong>Shreya Ajith (PES2UG24CS480)</strong> | Service Port: <strong>8001</strong>
         </p>
       </header>
 
@@ -473,6 +500,33 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
           </div>
         )}
       </section>
+
+      {/* Hand-off to Step 2 (Portion 2: Task Routing) */}
+      {onDatasetReady && uploadResult && (
+        <div style={{ marginTop: '24px', textAlign: 'right' }}>
+          {!canContinue && !processing && (
+            <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 8px' }}>
+              This dataset has missing values. Apply preprocessing before continuing.
+            </p>
+          )}
+          <button
+            onClick={handleContinue}
+            disabled={!canContinue}
+            style={{
+              padding: '10px 24px',
+              backgroundColor: '#2563eb',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 600,
+              opacity: canContinue ? 1 : 0.6,
+              cursor: canContinue ? 'pointer' : 'not-allowed',
+            }}
+          >
+            Continue to Task Configuration →
+          </button>
+        </div>
+      )}
     </div>
   );
 };
