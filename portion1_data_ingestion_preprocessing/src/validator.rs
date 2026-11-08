@@ -3,10 +3,7 @@ use crate::models::StandardErrorResponse;
 pub const MAX_FILE_SIZE_BYTES: usize = 10 * 1024 * 1024; // 10 MB (NFR-4)
 
 /// Validates CSV upload (size limit, file format, empty file, UTF-8 encoding)
-pub fn validate_csv_upload(
-    filename: &str,
-    bytes: &[u8],
-) -> Result<(), StandardErrorResponse> {
+pub fn validate_csv_upload(filename: &str, bytes: &[u8]) -> Result<(), StandardErrorResponse> {
     // 1. File size limit (NFR-4) -> 413
     if bytes.len() > MAX_FILE_SIZE_BYTES {
         return Err(StandardErrorResponse::new(
@@ -26,7 +23,10 @@ pub fn validate_csv_upload(
     if !filename.to_lowercase().ends_with(".csv") {
         return Err(StandardErrorResponse::new(
             "INVALID_FILE_FORMAT",
-            &format!("'{}' is not a CSV file. Only .csv files are accepted.", filename),
+            &format!(
+                "'{}' is not a CSV file. Only .csv files are accepted.",
+                filename
+            ),
             Some(serde_json::json!({ "filename": filename })),
         ));
     }
@@ -50,6 +50,22 @@ pub fn validate_csv_upload(
     }
 
     Ok(())
+}
+
+/// Sanitizes uploaded filename to prevent directory traversal and injection attacks (SEC-2)
+pub fn sanitize_filename(filename: &str) -> String {
+    let clean = filename
+        .replace('\\', "/")
+        .split('/')
+        .last()
+        .unwrap_or("dataset.csv")
+        .trim()
+        .to_string();
+    if clean.is_empty() {
+        "dataset.csv".to_string()
+    } else {
+        clean
+    }
 }
 
 #[cfg(test)]
@@ -84,5 +100,15 @@ mod tests {
     fn rejects_invalid_utf8() {
         let e = validate_csv_upload("data.csv", &[0xff, 0xfe, 0xfa]).unwrap_err();
         assert_eq!(e.error.code, "INVALID_ENCODING");
+    }
+
+    #[test]
+    fn sanitizes_directory_traversal_filename() {
+        assert_eq!(sanitize_filename("../../etc/passwd.csv"), "passwd.csv");
+        assert_eq!(
+            sanitize_filename("C:\\Users\\admin\\dataset.csv"),
+            "dataset.csv"
+        );
+        assert_eq!(sanitize_filename("   "), "dataset.csv");
     }
 }

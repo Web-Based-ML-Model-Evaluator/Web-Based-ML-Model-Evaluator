@@ -250,7 +250,10 @@ pub fn clean_and_impute(
             None => {
                 return Err(fail(
                     "UNKNOWN_COLUMN",
-                    format!("Column '{}' in imputation_rules does not exist in this dataset.", col),
+                    format!(
+                        "Column '{}' in imputation_rules does not exist in this dataset.",
+                        col
+                    ),
                 ));
             }
         };
@@ -269,7 +272,10 @@ pub fn clean_and_impute(
             {
                 return Err(fail(
                     "INVALID_CONSTANT",
-                    format!("Column '{}' is numeric, so its constant must be a number (got '{}').", col, value),
+                    format!(
+                        "Column '{}' is numeric, so its constant must be a number (got '{}').",
+                        col, value
+                    ),
                 ));
             }
             _ => {}
@@ -365,7 +371,10 @@ pub fn clean_and_impute(
                     if nums.is_empty() {
                         return Err(fail(
                             "CANNOT_IMPUTE",
-                            format!("Column '{}' has no values to calculate a mean or median from.", headers[j]),
+                            format!(
+                                "Column '{}' has no values to calculate a mean or median from.",
+                                headers[j]
+                            ),
                         ));
                     }
                     if matches!(strategy, ImputationStrategy::Mean) {
@@ -385,7 +394,10 @@ pub fn clean_and_impute(
                     if present.is_empty() {
                         return Err(fail(
                             "CANNOT_IMPUTE",
-                            format!("Column '{}' has no values to find a most common value from.", headers[j]),
+                            format!(
+                                "Column '{}' has no values to find a most common value from.",
+                                headers[j]
+                            ),
                         ));
                     }
                     most_frequent(&present)
@@ -526,12 +538,12 @@ mod tests {
         parse_csv_summary("id", "t.csv", csv.as_bytes()).unwrap().0
     }
 
-    fn request(rules: Vec<(&str, ImputationStrategy)>, drop_duplicates: bool) -> PreprocessingRequest {
+    fn request(
+        rules: Vec<(&str, ImputationStrategy)>,
+        drop_duplicates: bool,
+    ) -> PreprocessingRequest {
         PreprocessingRequest {
-            imputation_rules: rules
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v))
-                .collect(),
+            imputation_rules: rules.into_iter().map(|(k, v)| (k.to_string(), v)).collect(),
             drop_duplicates,
             trim_whitespace: true,
         }

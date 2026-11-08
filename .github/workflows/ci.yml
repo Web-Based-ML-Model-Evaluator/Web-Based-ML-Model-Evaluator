@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'issue-**' ]
   pull_request:
     branches: [ main ]
 
@@ -28,8 +28,14 @@ jobs:
       - name: Cargo check (Fast compile verification)
         run: cargo check --workspace --all-targets
 
-      - name: Run all workspace tests (68+ tests across Portions 1, 2, 3)
+      - name: Run all workspace tests (92+ tests across Portions 1, 2, 3)
         run: cargo test --workspace --verbose
+
+      - name: Verify Security & Error Handling tests (Issue #16 & #17)
+        run: |
+          cargo test -p portion1_data_ingestion_preprocessing --test ingestion_tests test_in_memory_buffer_purge test_error_message_sanitization_no_leak
+          cargo test -p portion2_task_routing_configuration --test routing_tests test_structured_error_format_fr13
+          cargo test -p portion3_model_execution_evaluation --test execution_tests test_session_buffer_purge_sec1_sec3 test_structured_error_responses_fr13
 
       - name: Code formatting check (rustfmt)
         run: cargo fmt --all -- --check
@@ -39,7 +45,7 @@ jobs:
         run: cargo clippy --workspace --all-targets -- -D warnings
         continue-on-error: true
 
-  # 2. Frontend TSX Typecheck (Validates all 3 portion React views)
+  # 2. Frontend TSX Typecheck (Validates all 3 portion React views + Central Orchestrator)
   frontend-check:
     name: Frontend TSX Typecheck
     runs-on: ubuntu-latest
@@ -67,9 +73,19 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Validate Unified API Contract JSON
+      - name: Validate Unified API Contract JSON & Purge Endpoints
         run: |
-          python3 -c "import json; json.load(open('contracts/unified_api_contract.json'))"
+          python3 -c "
+          import json
+          with open('contracts/unified_api_contract.json') as f:
+              contract = json.load(f)
+          p1_paths = [ep['path'] for ep in contract['services']['portion1_data_ingestion_preprocessing']['endpoints']]
+          p3_paths = [ep['path'] for ep in contract['services']['portion3_model_execution_evaluation']['endpoints']]
+          assert '/api/v1/session/purge' in p1_paths, 'Missing Portion 1 session purge endpoint'
+          assert '/api/v1/models/session/purge' in p3_paths, 'Missing Portion 3 session purge endpoint'
+          assert 'standard_error_format' in contract, 'Missing standard_error_format in contract'
+          print('Unified API Contract verified successfully with all security purge endpoints.')
+          "
           python3 -c "import json; json.load(open('contracts/fixtures/mock_cleaned_dataset.json'))"
           python3 -c "import json; json.load(open('contracts/fixtures/mock_execution_result.json'))"
           echo "All JSON contracts and mock fixtures are well-formed and valid."

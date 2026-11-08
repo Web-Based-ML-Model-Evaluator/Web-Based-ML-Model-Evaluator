@@ -46,11 +46,91 @@ export interface ComparisonReport {
   ranking: ModelRankEntry[];
 }
 
+export interface ConfusionMatrixData {
+  labels: string[];
+  matrix: number[][]; // matrix[actual][predicted]
+  metrics?: {
+    accuracy: number;
+    precision: number;
+    recall: number;
+    f1_score: number;
+  };
+}
+
+export interface PcaPoint {
+  id: number;
+  pc1: number;
+  pc2: number;
+  cluster: number;
+  label?: string;
+}
+
+export interface PcaClusteringData {
+  points: PcaPoint[];
+  silhouette_score?: number;
+  davies_bouldin_index?: number;
+  cluster_count?: number;
+}
+
 export interface EvaluationDashboardProps {
   datasetId?: string;
   apiBaseUrl?: string;
   regressionMetrics?: RegressionMetrics;
+  confusionMatrix?: ConfusionMatrixData;
+  pcaClustering?: PcaClusteringData;
 }
+
+export const DEFAULT_CONFUSION_MATRIX: ConfusionMatrixData = {
+  labels: ['Class 0 (Setosa)', 'Class 1 (Versicolor)', 'Class 2 (Virginica)'],
+  matrix: [
+    [50, 0, 0],
+    [0, 47, 3],
+    [0, 2, 48],
+  ],
+  metrics: {
+    accuracy: 0.967,
+    precision: 0.967,
+    recall: 0.967,
+    f1_score: 0.967,
+  },
+};
+
+export const DEFAULT_PCA_POINTS: PcaPoint[] = [
+  // Cluster 0 (Setosa)
+  { id: 1, pc1: -2.68, pc2: 0.32, cluster: 0, label: 'Sample #1' },
+  { id: 2, pc1: -2.71, pc2: -0.18, cluster: 0, label: 'Sample #2' },
+  { id: 3, pc1: -2.88, pc2: -0.14, cluster: 0, label: 'Sample #3' },
+  { id: 4, pc1: -2.75, pc2: -0.32, cluster: 0, label: 'Sample #4' },
+  { id: 5, pc1: -2.73, pc2: 0.33, cluster: 0, label: 'Sample #5' },
+  { id: 6, pc1: -2.28, pc2: 0.74, cluster: 0, label: 'Sample #6' },
+  { id: 7, pc1: -2.82, pc2: -0.09, cluster: 0, label: 'Sample #7' },
+  { id: 8, pc1: -2.63, pc2: 0.17, cluster: 0, label: 'Sample #8' },
+  // Cluster 1 (Versicolor)
+  { id: 9, pc1: 0.57, pc2: -0.63, cluster: 1, label: 'Sample #9' },
+  { id: 10, pc1: 0.48, pc2: -0.72, cluster: 1, label: 'Sample #10' },
+  { id: 11, pc1: 0.61, pc2: -0.54, cluster: 1, label: 'Sample #11' },
+  { id: 12, pc1: 0.31, pc2: -0.79, cluster: 1, label: 'Sample #12' },
+  { id: 13, pc1: 0.45, pc2: -0.62, cluster: 1, label: 'Sample #13' },
+  { id: 14, pc1: 0.72, pc2: -0.41, cluster: 1, label: 'Sample #14' },
+  { id: 15, pc1: 0.28, pc2: -0.83, cluster: 1, label: 'Sample #15' },
+  { id: 16, pc1: 0.52, pc2: -0.58, cluster: 1, label: 'Sample #16' },
+  // Cluster 2 (Virginica)
+  { id: 17, pc1: 1.86, pc2: 0.52, cluster: 2, label: 'Sample #17' },
+  { id: 18, pc1: 2.12, pc2: 0.64, cluster: 2, label: 'Sample #18' },
+  { id: 19, pc1: 2.04, pc2: 0.46, cluster: 2, label: 'Sample #19' },
+  { id: 20, pc1: 1.95, pc2: 0.73, cluster: 2, label: 'Sample #20' },
+  { id: 21, pc1: 2.31, pc2: 0.81, cluster: 2, label: 'Sample #21' },
+  { id: 22, pc1: 1.77, pc2: 0.39, cluster: 2, label: 'Sample #22' },
+  { id: 23, pc1: 2.15, pc2: 0.58, cluster: 2, label: 'Sample #23' },
+  { id: 24, pc1: 2.22, pc2: 0.69, cluster: 2, label: 'Sample #24' },
+];
+
+export const DEFAULT_PCA_CLUSTERING: PcaClusteringData = {
+  points: DEFAULT_PCA_POINTS,
+  silhouette_score: 0.725,
+  davies_bouldin_index: 0.65,
+  cluster_count: 3,
+};
 
 // Built-in Mock Datasets for complete offline developer isolation & testing (FR-12)
 const MOCK_COMPARISON_RUNS: ModelComparisonEntry[] = [
@@ -186,8 +266,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   datasetId = 'dataset-001',
   apiBaseUrl = 'http://localhost:8003',
   regressionMetrics,
+  confusionMatrix = DEFAULT_CONFUSION_MATRIX,
+  pcaClustering = DEFAULT_PCA_CLUSTERING,
 }) => {
   const [activeTab, setActiveTab] = useState<'results' | 'comparison'>('results');
+  const [showPercentages, setShowPercentages] = useState<boolean>(false);
+  const [hoveredPoint, setHoveredPoint] = useState<PcaPoint | null>(null);
+  const [selectedClusterFilter, setSelectedClusterFilter] = useState<number | 'all'>('all');
 
   // FR-12 Model Comparison Dashboard State
   const [offlineMockMode, setOfflineMockMode] = useState<boolean>(true);
@@ -509,20 +594,456 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
             </div>
           </section>
 
-          {/* SKELETON SECTION 2: Confusion Matrix Grid (FR-9) */}
-          <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3 style={{ marginTop: 0 }}>Step 2: Confusion Matrix (FR-9 - Classification)</h3>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>
-              [TODO: Shreya Patil - Render confusion matrix heatmap grid here]
-            </p>
+          {/* SECTION 2: Confusion Matrix Grid (FR-9) */}
+          <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#ffffff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#0f172a' }}>Step 2: Confusion Matrix Heatmap (FR-9 - Classification)</h3>
+                <p style={{ color: '#64748b', fontSize: '14px', margin: '4px 0 0' }}>
+                  Evaluates multi-class prediction accuracy, true positives, and misclassifications across ground-truth classes.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPercentages(!showPercentages)}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '13px',
+                  fontWeight: 600,
+                  borderRadius: '6px',
+                  border: '1px solid #cbd5e1',
+                  backgroundColor: showPercentages ? '#eff6ff' : '#ffffff',
+                  color: showPercentages ? '#1d4ed8' : '#334155',
+                  cursor: 'pointer',
+                }}
+              >
+                {showPercentages ? 'Show Raw Counts' : 'Show Percentages (%)'}
+              </button>
+            </div>
+
+            {/* Classification Summary KPI Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
+              <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>ACCURACY</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#15803d', marginTop: '2px' }}>
+                  {((confusionMatrix.metrics?.accuracy ?? 0.967) * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
+                <div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700 }}>PRECISION (MACRO)</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1d4ed8', marginTop: '2px' }}>
+                  {((confusionMatrix.metrics?.precision ?? 0.967) * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#faf5ff', borderRadius: '6px', border: '1px solid #e9d5ff' }}>
+                <div style={{ fontSize: '11px', color: '#6b21a8', fontWeight: 700 }}>RECALL (MACRO)</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7e22ce', marginTop: '2px' }}>
+                  {((confusionMatrix.metrics?.recall ?? 0.967) * 100).toFixed(1)}%
+                </div>
+              </div>
+              <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #fde68a' }}>
+                <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 700 }}>F1-SCORE</div>
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#b45309', marginTop: '2px' }}>
+                  {((confusionMatrix.metrics?.f1_score ?? 0.967) * 100).toFixed(1)}%
+                </div>
+              </div>
+            </div>
+
+            {/* Heatmap Grid */}
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'center', fontSize: '13px' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', color: '#475569' }}>
+                      Actual \ Predicted
+                    </th>
+                    {confusionMatrix.labels.map((colLabel, idx) => (
+                      <th
+                        key={idx}
+                        style={{
+                          padding: '10px',
+                          backgroundColor: '#f1f5f9',
+                          border: '1px solid #e2e8f0',
+                          color: '#1e293b',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {colLabel}
+                      </th>
+                    ))}
+                    <th style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', color: '#64748b', fontWeight: 600 }}>
+                      Total
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {confusionMatrix.matrix.map((row, rowIdx) => {
+                    const rowTotal = row.reduce((sum, val) => sum + val, 0);
+                    const maxVal = Math.max(...confusionMatrix.matrix.flat(), 1);
+                    return (
+                      <tr key={rowIdx}>
+                        <th
+                          style={{
+                            padding: '10px',
+                            backgroundColor: '#f1f5f9',
+                            border: '1px solid #e2e8f0',
+                            textAlign: 'left',
+                            color: '#1e293b',
+                            fontWeight: 700,
+                          }}
+                        >
+                          {confusionMatrix.labels[rowIdx]}
+                        </th>
+                        {row.map((cellVal, colIdx) => {
+                          const isTruePositive = rowIdx === colIdx;
+                          const ratio = cellVal / maxVal;
+                          const pct = rowTotal > 0 ? ((cellVal / rowTotal) * 100).toFixed(1) : '0.0';
+                          const bgColor = isTruePositive
+                            ? `rgba(37, 99, 235, ${Math.max(0.12, ratio * 0.9)})`
+                            : cellVal > 0
+                            ? `rgba(239, 68, 68, ${Math.max(0.1, ratio * 0.7)})`
+                            : '#ffffff';
+                          const textColor = ratio > 0.55 ? '#ffffff' : cellVal > 0 && !isTruePositive ? '#991b1b' : '#0f172a';
+
+                          return (
+                            <td
+                              key={colIdx}
+                              title={`Actual: ${confusionMatrix.labels[rowIdx]} | Predicted: ${confusionMatrix.labels[colIdx]} (${cellVal} samples, ${pct}%)`}
+                              style={{
+                                padding: '12px',
+                                border: '1px solid #cbd5e1',
+                                backgroundColor: bgColor,
+                                color: textColor,
+                                fontWeight: isTruePositive ? 700 : 500,
+                                position: 'relative',
+                              }}
+                            >
+                              <div style={{ fontSize: '15px' }}>
+                                {showPercentages ? `${pct}%` : cellVal}
+                              </div>
+                              {isTruePositive && (
+                                <div style={{ fontSize: '10px', opacity: 0.85, fontWeight: 500 }}>
+                                  TP ({cellVal})
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td style={{ padding: '10px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', fontWeight: 600, color: '#334155' }}>
+                          {rowTotal}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginTop: '12px', fontSize: '12px', color: '#64748b' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: 'rgba(37, 99, 235, 0.8)', borderRadius: '2px' }} />
+                <span>True Positives (Diagonal Match)</span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                <span style={{ display: 'inline-block', width: '12px', height: '12px', backgroundColor: 'rgba(239, 68, 68, 0.4)', borderRadius: '2px' }} />
+                <span>Misclassifications (Off-diagonal)</span>
+              </div>
+            </div>
           </section>
 
-          {/* SKELETON SECTION 3: 2D PCA Cluster Scatter Plot (FR-11) */}
-          <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-            <h3 style={{ marginTop: 0 }}>Step 3: 2D PCA Cluster Scatter Plot (FR-11 - Clustering)</h3>
-            <p style={{ color: '#64748b', fontSize: '14px' }}>
-              [TODO: Shreya Patil - Render 2D PCA cluster scatter plot using Recharts or Plotly.js here]
-            </p>
+          {/* SECTION 3: 2D PCA Cluster Scatter Plot (FR-11) */}
+          <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+              <div>
+                <h3 style={{ margin: 0, color: '#0f172a' }}>Step 3: 2D PCA Cluster Scatter Plot (FR-11 - Clustering)</h3>
+                <p style={{ color: '#64748b', fontSize: '14px', margin: '4px 0 0' }}>
+                  Visualizes unsupervised clustering quality projected onto the first 2 Principal Components (PC1 vs PC2).
+                </p>
+              </div>
+
+              {/* Quality Metric Badges */}
+              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                <div style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px' }}>
+                  <span style={{ color: '#166534', fontWeight: 600 }}>Silhouette Score: </span>
+                  <span style={{ fontWeight: 700, color: '#15803d' }}>
+                    {pcaClustering.silhouette_score ?? 0.725}
+                  </span>
+                </div>
+                <div style={{ padding: '6px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px' }}>
+                  <span style={{ color: '#1e40af', fontWeight: 600 }}>Davies-Bouldin: </span>
+                  <span style={{ fontWeight: 700, color: '#1d4ed8' }}>
+                    {pcaClustering.davies_bouldin_index ?? 0.65}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Cluster Filter Buttons */}
+            <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+              <span style={{ fontSize: '12px', fontWeight: 600, color: '#64748b' }}>Filter Cluster:</span>
+              <button
+                type="button"
+                onClick={() => setSelectedClusterFilter('all')}
+                style={{
+                  padding: '4px 10px',
+                  borderRadius: '14px',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  border: selectedClusterFilter === 'all' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+                  backgroundColor: selectedClusterFilter === 'all' ? '#eff6ff' : '#ffffff',
+                  color: selectedClusterFilter === 'all' ? '#1d4ed8' : '#475569',
+                }}
+              >
+                All Clusters ({pcaClustering.points.length})
+              </button>
+              {Array.from(new Set(pcaClustering.points.map((p) => p.cluster))).sort().map((clusterId) => {
+                const colors = ['#2563eb', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'];
+                const clr = colors[clusterId % colors.length];
+                const count = pcaClustering.points.filter((p) => p.cluster === clusterId).length;
+                return (
+                  <button
+                    key={clusterId}
+                    type="button"
+                    onClick={() => setSelectedClusterFilter(clusterId)}
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '14px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: selectedClusterFilter === clusterId ? `2px solid ${clr}` : '1px solid #cbd5e1',
+                      backgroundColor: selectedClusterFilter === clusterId ? `${clr}15` : '#ffffff',
+                      color: selectedClusterFilter === clusterId ? clr : '#475569',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                    }}
+                  >
+                    <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: clr }} />
+                    Cluster {clusterId} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Interactive SVG Scatter Plot */}
+            <div style={{ position: 'relative', border: '1px solid #e2e8f0', borderRadius: '6px', backgroundColor: '#fafafa', padding: '12px' }}>
+              {(() => {
+                const points = pcaClustering.points;
+                const colors = ['#2563eb', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899'];
+
+                const svgWidth = 640;
+                const svgHeight = 340;
+                const padLeft = 55;
+                const padRight = 30;
+                const padTop = 25;
+                const padBottom = 45;
+                const plotWidth = svgWidth - padLeft - padRight;
+                const plotHeight = svgHeight - padTop - padBottom;
+
+                const allPc1 = points.map((p) => p.pc1);
+                const allPc2 = points.map((p) => p.pc2);
+                const minPc1 = Math.min(...allPc1, -3.2) - 0.5;
+                const maxPc1 = Math.max(...allPc1, 3.2) + 0.5;
+                const minPc2 = Math.min(...allPc2, -1.5) - 0.5;
+                const maxPc2 = Math.max(...allPc2, 1.5) + 0.5;
+
+                const scaleX = (val: number) => padLeft + ((val - minPc1) / (maxPc1 - minPc1)) * plotWidth;
+                const scaleY = (val: number) => padTop + (1 - (val - minPc2) / (maxPc2 - minPc2)) * plotHeight;
+
+                const zeroX = scaleX(0);
+                const zeroY = scaleY(0);
+
+                // Compute Centroids
+                const clusterGroups: Record<number, { sumPc1: number; sumPc2: number; count: number }> = {};
+                points.forEach((p) => {
+                  if (!clusterGroups[p.cluster]) {
+                    clusterGroups[p.cluster] = { sumPc1: 0, sumPc2: 0, count: 0 };
+                  }
+                  clusterGroups[p.cluster].sumPc1 += p.pc1;
+                  clusterGroups[p.cluster].sumPc2 += p.pc2;
+                  clusterGroups[p.cluster].count += 1;
+                });
+
+                return (
+                  <svg
+                    viewBox={`0 0 ${svgWidth} ${svgHeight}`}
+                    style={{ width: '100%', height: 'auto', display: 'block' }}
+                  >
+                    {/* Background Grid Lines */}
+                    {[-3, -2, -1, 1, 2, 3].map((tick) => {
+                      if (tick < minPc1 || tick > maxPc1) return null;
+                      const x = scaleX(tick);
+                      return (
+                        <line
+                          key={`vx-${tick}`}
+                          x1={x}
+                          y1={padTop}
+                          x2={x}
+                          y2={padTop + plotHeight}
+                          stroke="#e2e8f0"
+                          strokeDasharray="3 3"
+                        />
+                      );
+                    })}
+                    {[-1.5, -1, -0.5, 0.5, 1, 1.5].map((tick) => {
+                      if (tick < minPc2 || tick > maxPc2) return null;
+                      const y = scaleY(tick);
+                      return (
+                        <line
+                          key={`hy-${tick}`}
+                          x1={padLeft}
+                          y1={y}
+                          x2={padLeft + plotWidth}
+                          y2={y}
+                          stroke="#e2e8f0"
+                          strokeDasharray="3 3"
+                        />
+                      );
+                    })}
+
+                    {/* Zero Axes */}
+                    {zeroX >= padLeft && zeroX <= padLeft + plotWidth && (
+                      <line
+                        x1={zeroX}
+                        y1={padTop}
+                        x2={zeroX}
+                        y2={padTop + plotHeight}
+                        stroke="#cbd5e1"
+                        strokeWidth="1.5"
+                      />
+                    )}
+                    {zeroY >= padTop && zeroY <= padTop + plotHeight && (
+                      <line
+                        x1={padLeft}
+                        y1={zeroY}
+                        x2={padLeft + plotWidth}
+                        y2={zeroY}
+                        stroke="#cbd5e1"
+                        strokeWidth="1.5"
+                      />
+                    )}
+
+                    {/* Outer Border */}
+                    <rect
+                      x={padLeft}
+                      y={padTop}
+                      width={plotWidth}
+                      height={plotHeight}
+                      fill="none"
+                      stroke="#94a3b8"
+                      strokeWidth="1"
+                    />
+
+                    {/* Axis Labels */}
+                    <text
+                      x={padLeft + plotWidth / 2}
+                      y={svgHeight - 10}
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight="600"
+                      fill="#475569"
+                    >
+                      Principal Component 1 (PC1)
+                    </text>
+                    <text
+                      x={-padTop - plotHeight / 2}
+                      y={18}
+                      transform="rotate(-90)"
+                      textAnchor="middle"
+                      fontSize="12"
+                      fontWeight="600"
+                      fill="#475569"
+                    >
+                      Principal Component 2 (PC2)
+                    </text>
+
+                    {/* Data Points */}
+                    {points.map((p) => {
+                      const isDimmed = selectedClusterFilter !== 'all' && selectedClusterFilter !== p.cluster;
+                      const isHovered = hoveredPoint?.id === p.id;
+                      const clr = colors[p.cluster % colors.length];
+                      const cx = scaleX(p.pc1);
+                      const cy = scaleY(p.pc2);
+
+                      return (
+                        <circle
+                          key={p.id}
+                          cx={cx}
+                          cy={cy}
+                          r={isHovered ? 8 : 5.5}
+                          fill={clr}
+                          stroke={isHovered ? '#0f172a' : '#ffffff'}
+                          strokeWidth={isHovered ? 2.5 : 1.5}
+                          opacity={isDimmed ? 0.2 : 0.9}
+                          style={{ cursor: 'pointer', transition: 'all 0.15s ease' }}
+                          onMouseEnter={() => setHoveredPoint(p)}
+                          onMouseLeave={() => setHoveredPoint(null)}
+                        >
+                          <title>{`${p.label || `Sample #${p.id}`}: Cluster ${p.cluster} (PC1: ${p.pc1.toFixed(2)}, PC2: ${p.pc2.toFixed(2)})`}</title>
+                        </circle>
+                      );
+                    })}
+
+                    {/* Cluster Centroids */}
+                    {Object.entries(clusterGroups).map(([cIdStr, g]) => {
+                      const cId = parseInt(cIdStr, 10);
+                      if (selectedClusterFilter !== 'all' && selectedClusterFilter !== cId) return null;
+                      const clr = colors[cId % colors.length];
+                      const cx = scaleX(g.sumPc1 / g.count);
+                      const cy = scaleY(g.sumPc2 / g.count);
+
+                      return (
+                        <g key={`centroid-${cId}`}>
+                          <rect
+                            x={cx - 6}
+                            y={cy - 6}
+                            width="12"
+                            height="12"
+                            transform={`rotate(45 ${cx} ${cy})`}
+                            fill={clr}
+                            stroke="#ffffff"
+                            strokeWidth="2"
+                          />
+                          <text
+                            x={cx + 10}
+                            y={cy + 4}
+                            fontSize="11"
+                            fontWeight="bold"
+                            fill={clr}
+                          >
+                            C{cId}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                );
+              })()}
+
+              {/* Tooltip Card for Hovered Point */}
+              {hoveredPoint && (
+                <div
+                  style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    backgroundColor: '#1e293b',
+                    color: '#ffffff',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    display: 'flex',
+                    gap: '16px',
+                    alignItems: 'center',
+                  }}
+                >
+                  <span style={{ fontWeight: 700 }}>{hoveredPoint.label || `Sample #${hoveredPoint.id}`}</span>
+                  <span>Cluster: <strong style={{ color: '#38bdf8' }}>{hoveredPoint.cluster}</strong></span>
+                  <span>PC1: <strong>{hoveredPoint.pc1.toFixed(3)}</strong></span>
+                  <span>PC2: <strong>{hoveredPoint.pc2.toFixed(3)}</strong></span>
+                </div>
+              )}
+            </div>
           </section>
         </div>
       ) : (

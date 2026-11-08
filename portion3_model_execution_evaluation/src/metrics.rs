@@ -1,5 +1,5 @@
-use crate::models::{ClassificationMetrics, ClusteringMetrics, PcaScatterPoint, RegressionMetrics};
 use crate::ml_algorithms::MlError;
+use crate::models::{ClassificationMetrics, ClusteringMetrics, PcaScatterPoint, RegressionMetrics};
 use std::collections::HashMap;
 
 /// Computes Classification Metrics: Accuracy, Precision, Recall, F1, and Confusion Matrix
@@ -15,7 +15,12 @@ pub fn compute_classification_metrics(
 
     let class_labels = sorted_labels(&pairs);
     let k = class_labels.len();
-    let index_of = |l: &String| class_labels.iter().position(|c| c == l).expect("label collected");
+    let index_of = |l: &String| {
+        class_labels
+            .iter()
+            .position(|c| c == l)
+            .expect("label collected")
+    };
 
     let mut cm = vec![vec![0usize; k]; k];
     for (a, p) in &pairs {
@@ -23,8 +28,16 @@ pub fn compute_classification_metrics(
     }
 
     let total = actual.len();
-    let correct = actual.iter().zip(predicted.iter()).filter(|(a, b)| a == b).count();
-    let accuracy = if total > 0 { correct as f64 / total as f64 } else { 0.0 };
+    let correct = actual
+        .iter()
+        .zip(predicted.iter())
+        .filter(|(a, b)| a == b)
+        .count();
+    let accuracy = if total > 0 {
+        correct as f64 / total as f64
+    } else {
+        0.0
+    };
 
     let (mut p_sum, mut r_sum, mut f_sum) = (0.0, 0.0, 0.0);
     for c in 0..k {
@@ -33,7 +46,11 @@ pub fn compute_classification_metrics(
         let fn_: f64 = (0..k).filter(|&j| j != c).map(|j| cm[c][j] as f64).sum();
         let p = if tp + fp > 0.0 { tp / (tp + fp) } else { 0.0 };
         let r = if tp + fn_ > 0.0 { tp / (tp + fn_) } else { 0.0 };
-        let f = if p + r > 0.0 { 2.0 * p * r / (p + r) } else { 0.0 };
+        let f = if p + r > 0.0 {
+            2.0 * p * r / (p + r)
+        } else {
+            0.0
+        };
         p_sum += p;
         r_sum += r;
         f_sum += f;
@@ -62,7 +79,10 @@ fn sorted_labels(pairs: &[(&String, &String)]) -> Vec<String> {
     }
     if labels.iter().all(|s| s.trim().parse::<f64>().is_ok()) {
         labels.sort_by(|x, y| {
-            x.trim().parse::<f64>().unwrap().total_cmp(&y.trim().parse::<f64>().unwrap())
+            x.trim()
+                .parse::<f64>()
+                .unwrap()
+                .total_cmp(&y.trim().parse::<f64>().unwrap())
         });
     } else {
         labels.sort();
@@ -77,10 +97,7 @@ fn sorted_labels(pairs: &[(&String, &String)]) -> Vec<String> {
 /// - Mean Squared Error (MSE): (1/n) * sum((actual - predicted)^2)
 /// - Root Mean Squared Error (RMSE): sqrt(MSE)
 /// - R2 Score (Coefficient of Determination): 1 - (SS_res / SS_tot)
-pub fn compute_regression_metrics(
-    actual: &[f64],
-    predicted: &[f64],
-) -> RegressionMetrics {
+pub fn compute_regression_metrics(actual: &[f64], predicted: &[f64]) -> RegressionMetrics {
     let n = actual.len().min(predicted.len());
     if n == 0 {
         return RegressionMetrics {
@@ -324,7 +341,7 @@ fn compute_clustering_metrics_checked(
 
 #[cfg(test)]
 mod classification_tests {
-   use super::*;
+    use super::*;
 
     fn v(xs: &[&str]) -> Vec<String> {
         xs.iter().map(|s| s.to_string()).collect()
@@ -352,7 +369,10 @@ mod classification_tests {
         let t = v(&["a", "b", "c"]);
         let p = v(&["a", "b", "b"]);
         let m = compute_classification_metrics(&t, &p);
-        assert_eq!(m.confusion_matrix, vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 1, 0]]);
+        assert_eq!(
+            m.confusion_matrix,
+            vec![vec![1, 0, 0], vec![0, 1, 0], vec![0, 1, 0]]
+        );
         close(m.accuracy, 2.0 / 3.0);
         close(m.precision, (1.0 + 0.5 + 0.0) / 3.0); // class c never predicted -> 0, not NaN
         close(m.recall, (1.0 + 1.0 + 0.0) / 3.0);
@@ -452,10 +472,7 @@ mod clustering_metrics_tests {
     use super::*;
 
     fn close(actual: f64, expected: f64) {
-        assert!(
-            (actual - expected).abs() < 1e-9,
-            "{actual} != {expected}"
-        );
+        assert!((actual - expected).abs() < 1e-9, "{actual} != {expected}");
     }
 
     #[test]
@@ -493,8 +510,7 @@ mod clustering_metrics_tests {
 
     #[test]
     fn undefined_scores_are_zero_for_one_observed_cluster() {
-        let metrics =
-            compute_clustering_metrics(&[vec![0.0], vec![1.0]], &[0, 0], 2, vec![]);
+        let metrics = compute_clustering_metrics(&[vec![0.0], vec![1.0]], &[0, 0], 2, vec![]);
 
         assert_eq!(metrics.silhouette_score, 0.0);
         assert_eq!(metrics.davies_bouldin_index, 0.0);

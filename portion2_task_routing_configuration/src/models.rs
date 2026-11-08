@@ -57,10 +57,10 @@ pub struct TaskConfiguration {
     pub dataset_id: String,
     pub task_type: TaskType,
     pub algorithm: String,
-    pub target_column: Option<String>,         // Required for Supervised (FR-5)
-    pub feature_columns: Vec<String>,           // Required for all (FR-5, FR-6)
-    pub test_split_ratio: Option<f64>,          // 0.1 to 0.5 (FR-7)
-    pub num_clusters: Option<usize>,            // Required for Clustering k >= 2 (FR-6)
+    pub target_column: Option<String>, // Required for Supervised (FR-5)
+    pub feature_columns: Vec<String>,  // Required for all (FR-5, FR-6)
+    pub test_split_ratio: Option<f64>, // 0.1 to 0.5 (FR-7)
+    pub num_clusters: Option<usize>,   // Required for Clustering k >= 2 (FR-6)
     pub random_seed: Option<u64>,
 }
 

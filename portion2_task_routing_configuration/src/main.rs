@@ -8,7 +8,10 @@ use axum::{
     Router,
 };
 use client::PipelineClient;
-use handlers::{dispatch_pipeline, health_check, list_supported_tasks, validate_configuration, AppState};
+use handlers::{
+    dispatch_pipeline, fallback_404_handler, health_check, list_supported_tasks,
+    validate_configuration, AppState,
+};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::cors::{Any, CorsLayer};
@@ -24,6 +27,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/config/tasks", get(list_supported_tasks))
         .route("/api/v1/config/validate", post(validate_configuration))
         .route("/api/v1/pipeline/dispatch", post(dispatch_pipeline))
+        .fallback(fallback_404_handler)
         .layer(cors)
         .with_state(state)
 }
@@ -32,8 +36,10 @@ pub fn create_router(state: AppState) -> Router {
 async fn main() {
     tracing_subscriber::fmt::init();
 
-    let p1_url = std::env::var("PORTION1_URL").unwrap_or_else(|_| "http://localhost:8001".to_string());
-    let p3_url = std::env::var("PORTION3_URL").unwrap_or_else(|_| "http://localhost:8003".to_string());
+    let p1_url =
+        std::env::var("PORTION1_URL").unwrap_or_else(|_| "http://localhost:8001".to_string());
+    let p3_url =
+        std::env::var("PORTION3_URL").unwrap_or_else(|_| "http://localhost:8003".to_string());
 
     let client = Arc::new(PipelineClient::new(&p1_url, &p3_url));
     let state = AppState { client };
@@ -46,9 +52,18 @@ async fn main() {
     println!(" Assigned Owner: Satvik Phadke (PES2UG24CS450)");
     println!(" Listening on:   http://localhost:{}", port);
     println!(" Health Check:   http://localhost:{}/health", port);
-    println!(" Tasks API:      GET  http://localhost:{}/api/v1/config/tasks", port);
-    println!(" Validate API:   POST http://localhost:{}/api/v1/config/validate", port);
-    println!(" Dispatch API:   POST http://localhost:{}/api/v1/pipeline/dispatch", port);
+    println!(
+        " Tasks API:      GET  http://localhost:{}/api/v1/config/tasks",
+        port
+    );
+    println!(
+        " Validate API:   POST http://localhost:{}/api/v1/config/validate",
+        port
+    );
+    println!(
+        " Dispatch API:   POST http://localhost:{}/api/v1/pipeline/dispatch",
+        port
+    );
     println!(" Upstream P1:    {}", p1_url);
     println!(" Downstream P3:  {}", p3_url);
     println!("============================================================");

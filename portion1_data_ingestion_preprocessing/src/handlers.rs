@@ -3,7 +3,7 @@ use crate::models::{
     StandardErrorResponse,
 };
 use crate::preprocessing::{clean_and_impute, parse_csv_summary, RawDataset};
-use crate::validator::validate_csv_upload;
+use crate::validator::{sanitize_filename, validate_csv_upload};
 use axum::{
     extract::{Multipart, Path, State},
     http::StatusCode,
@@ -42,7 +42,7 @@ pub async fn upload_dataset(
         let name = field.name().unwrap_or("").to_string();
         if name == "file" || name == "dataset" {
             if let Some(f_name) = field.file_name() {
-                filename = f_name.to_string();
+                filename = sanitize_filename(f_name);
             }
             let data = field.bytes().await.map_err(|e| {
                 let status = e.status();
@@ -57,7 +57,10 @@ pub async fn upload_dataset(
                         format!("Failed to read multipart file stream: {}", e),
                     )
                 };
-                (status, Json(StandardErrorResponse::new(code, &message, None)))
+                (
+                    status,
+                    Json(StandardErrorResponse::new(code, &message, None)),
+                )
             })?;
             file_bytes = Some(data.to_vec());
             break;
@@ -145,8 +148,8 @@ pub async fn preprocess_dataset(
         })?
     };
 
-    let (cleaned_dto, response) = clean_and_impute(&raw_data, &payload)
-        .map_err(|e| (StatusCode::BAD_REQUEST, Json(e)))?;
+    let (cleaned_dto, response) =
+        clean_and_impute(&raw_data, &payload).map_err(|e| (StatusCode::BAD_REQUEST, Json(e)))?;
 
     {
         let mut cleaned_lock = state.cleaned_datasets.write().unwrap();
@@ -182,7 +185,10 @@ pub async fn get_cleaned_data(
             StatusCode::NOT_FOUND,
             Json(StandardErrorResponse::new(
                 "CLEANED_DATA_NOT_FOUND",
-                &format!("Cleaned data for dataset '{}' not found. Run preprocessing first.", dataset_id),
+                &format!(
+                    "Cleaned data for dataset '{}' not found. Run preprocessing first.",
+                    dataset_id
+                ),
                 None,
             )),
         ))
@@ -218,4 +224,68 @@ pub async fn get_schema(
             )),
         ))
     }
+}
+
+/// DELETE /api/v1/datasets/{dataset_id} or POST /api/v1/datasets/{dataset_id}/purge (SEC-1, SEC-3, SRS 7.3)
+pub async fn purge_dataset(
+    State(state): State<AppState>,
+    Path(dataset_id): Path<String>,
+) -> Result<Json<serde_json::Value>, (StatusCode, Json<StandardErrorResponse>)> {
+    let mut raw_lock = state.raw_datasets.write().unwrap();
+    let mut summary_lock = state.upload_summaries.write().unwrap();
+    let mut cleaned_lock = state.cleaned_datasets.write().unwrap();
+
+    let removed_raw = raw_lock.remove(&dataset_id).is_some();
+    let removed_summary = summary_lock.remove(&dataset_id).is_some();
+    let removed_cleaned = cleaned_lock.remove(&dataset_id).is_some();
+
+    if removed_raw || removed_summary || removed_cleaned {
+        Ok(Json(serde_json::json!({
+            "status": "PURGED_SUCCESSFULLY",
+            "dataset_id": dataset_id,
+            "message": "Dataset securely purged from in-memory session buffer per SEC-1 and SEC-3."
+        })))
+    } else {
+        Err((
+            StatusCode::NOT_FOUND,
+            Json(StandardErrorResponse::new(
+                "DATASET_NOT_FOUND",
+                &format!(
+                    "Dataset with ID '{}' does not exist or has already been purged.",
+                    dataset_id
+                ),
+                None,
+            )),
+        ))
+    }
+}
+
+/// POST /api/v1/session/purge (SEC-1, SEC-3, SRS 7.3)
+pub async fn purge_all_datasets(State(state): State<AppState>) -> Json<serde_json::Value> {
+    let mut raw_lock = state.raw_datasets.write().unwrap();
+    let mut summary_lock = state.upload_summaries.write().unwrap();
+    let mut cleaned_lock = state.cleaned_datasets.write().unwrap();
+
+    let count = raw_lock.len() + summary_lock.len() + cleaned_lock.len();
+    raw_lock.clear();
+    summary_lock.clear();
+    cleaned_lock.clear();
+
+    Json(serde_json::json!({
+        "status": "SESSION_PURGED",
+        "purged_records_count": count,
+        "message": "All session datasets purged securely from host memory per SEC-1 and SEC-3."
+    }))
+}
+
+/// Fallback 404 handler returning standard error format (FR-13, SEC-4)
+pub async fn fallback_404_handler() -> impl IntoResponse {
+    (
+        StatusCode::NOT_FOUND,
+        Json(StandardErrorResponse::new(
+            "RESOURCE_NOT_FOUND",
+            "The requested endpoint does not exist on Portion 1 service.",
+            None,
+        )),
+    )
 }
