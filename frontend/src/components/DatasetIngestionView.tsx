@@ -72,7 +72,7 @@ const CATEGORICAL_STRATEGIES = ['mode', 'constant', 'drop_rows_with_null', 'drop
 
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
   onDatasetReady,
-  apiBaseUrl = 'http://localhost:8000',
+  apiBaseUrl = 'http://localhost:8080',
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);

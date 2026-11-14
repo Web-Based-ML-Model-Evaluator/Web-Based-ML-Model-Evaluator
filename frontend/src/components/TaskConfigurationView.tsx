@@ -47,7 +47,7 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     target: 'Categorical',
   },
   onConfigurationComplete,
-  apiBaseUrl = 'http://localhost:8000',
+  apiBaseUrl = 'http://localhost:8080',
 }) => {
   const [taskType, setTaskType] = useState<TaskType>('classification');
   const [algorithm, setAlgorithm] = useState<string>(

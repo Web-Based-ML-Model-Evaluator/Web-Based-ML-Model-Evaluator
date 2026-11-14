@@ -264,7 +264,7 @@ const MOCK_COMPARISON_RUNS: ModelComparisonEntry[] = [
 
 export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   datasetId = 'dataset-001',
-  apiBaseUrl = 'http://localhost:8000',
+  apiBaseUrl = 'http://localhost:8080',
   regressionMetrics,
   confusionMatrix = DEFAULT_CONFUSION_MATRIX,
   pcaClustering = DEFAULT_PCA_CLUSTERING,

@@ -65,7 +65,7 @@ export const App: React.FC = () => {
     errorMessage: null,
   });
 
-  const apiBaseUrl = 'http://localhost:8000';
+  const apiBaseUrl = 'http://localhost:8080';
 
   useEffect(() => {
     probeGpuAcceleration().then((info) => {

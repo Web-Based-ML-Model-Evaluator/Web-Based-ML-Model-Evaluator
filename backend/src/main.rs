@@ -12,31 +12,32 @@ async fn main() {
     tracing_subscriber::fmt::init();
 
     let state = AppState::default();
-    let app = create_router(state.clone());
+    let app = create_router(state);
 
-    let port: u16 = std::env::var("PORT")
-        .ok()
-        .and_then(|p| p.parse().ok())
-        .unwrap_or(8000);
+    let preferred_ports: Vec<u16> = if let Ok(p_str) = std::env::var("PORT") {
+        vec![p_str.parse().unwrap_or(8080)]
+    } else {
+        vec![8080, 8000, 8081, 5000]
+    };
 
-    let addr = SocketAddr::from(([0, 0, 0, 0], port));
-    tracing::info!("Unified ML Backend server listening on http://{}", addr);
+    let mut listener_opt = None;
+    let mut bound_port = 8080;
 
-    // Also run backward-compatibility listeners on 8001, 8002, 8003 if on default port 8000
-    if port == 8000 {
-        for compat_port in [8001, 8002, 8003] {
-            let compat_state = state.clone();
-            tokio::spawn(async move {
-                let compat_app = create_router(compat_state);
-                let compat_addr = SocketAddr::from(([0, 0, 0, 0], compat_port));
-                if let Ok(listener) = tokio::net::TcpListener::bind(compat_addr).await {
-                    tracing::info!("Backward-compatibility proxy listening on http://{}", compat_addr);
-                    let _ = axum::serve(listener, compat_app).await;
-                }
-            });
+    for p in preferred_ports {
+        let addr = SocketAddr::from(([127, 0, 0, 1], p));
+        if let Ok(l) = tokio::net::TcpListener::bind(addr).await {
+            listener_opt = Some(l);
+            bound_port = p;
+            break;
         }
     }
 
-    let listener = tokio::net::TcpListener::bind(addr).await.unwrap();
+    let listener = listener_opt.expect("Failed to bind TCP listener to an open port");
+
+    println!("============================================================");
+    println!("🚀 Unified ML Backend server running at http://localhost:{}", bound_port);
+    println!("============================================================");
+    tracing::info!("Unified ML Backend server listening on http://localhost:{}", bound_port);
+
     axum::serve(listener, app).await.unwrap();
 }

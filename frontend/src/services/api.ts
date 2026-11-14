@@ -3,7 +3,7 @@
  * Connects to the consolidated high-performance Rust backend.
  */
 
-const API_BASE = 'http://localhost:8000';
+const API_BASE = 'http://localhost:8080';
 
 export interface DatasetUploadResult {
   dataset_id: string;
