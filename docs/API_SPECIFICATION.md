@@ -2,10 +2,13 @@
 
 **Project:** Web Based ML Model Evaluator (Team 13)  
 **Protocol:** HTTP/1.1 REST + JSON (Multipart for CSV uploads)  
-**Standard Port Allocation:**
-- **Portion 1 (Sneha Ajith):** `http://localhost:8001`
-- **Portion 2 (Satvik Phadke):** `http://localhost:8002`
-- **Portion 3 (Shreya Patil):** `http://localhost:8003`
+**Unified High-Performance Server Port:** `http://localhost:8000`  
+**Backward Compatibility Ports:**
+- **Portion 1 Compatibility Proxy:** `http://localhost:8001`
+- **Portion 2 Compatibility Proxy:** `http://localhost:8002`
+- **Portion 3 Compatibility Proxy:** `http://localhost:8003`
+
+> **Note on Unified Architecture:** All previous microservice portions have been consolidated into a single zero-latency in-memory backend service (`web_ml_backend` on port `8000`). All endpoints are accessible directly on port `8000` as well as their legacy ports. Added `/api/v1/hardware/status` for GPU/VRAM capability detection and hardware acceleration.
 
 ---
 
