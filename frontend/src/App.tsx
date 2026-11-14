@@ -5,6 +5,7 @@ import { GpuAccelerationPanel } from './components/GpuAccelerationPanel';
 import { DatasetIngestionView } from './components/DatasetIngestionView';
 import { TaskConfigurationView } from './components/TaskConfigurationView';
 import { EvaluationDashboardView } from './components/EvaluationDashboardView';
+import { SimpleEvaluateModelView } from './components/SimpleEvaluateModelView';
 import { probeGpuAcceleration } from './services/webgpu';
 import { ApiClient } from './services/api';
 
@@ -28,6 +29,7 @@ const STEPS: StepMetadata[] = [
 export const App: React.FC = () => {
   // Primary Navigation View ('home' matching screenshot, 'train', 'evaluate')
   const [currentView, setCurrentView] = useState<MainView>('home');
+  const [evaluateMode, setEvaluateMode] = useState<'simple' | 'advanced'>('simple');
   const [currentStep, setCurrentStep] = useState<WizardStep>(1);
   const [completedSteps, setCompletedSteps] = useState<Set<WizardStep>>(new Set());
 
@@ -80,6 +82,7 @@ export const App: React.FC = () => {
       setCurrentStep(1);
     } else {
       setCurrentView('evaluate');
+      setEvaluateMode('simple');
     }
   };
 
@@ -378,51 +381,76 @@ export const App: React.FC = () => {
           </div>
         )}
 
-        {/* EVALUATE WORKFLOW VIEW: Direct Leaderboard & Metrics */}
+        {/* EVALUATE WORKFLOW VIEW: Student-friendly 2-Step Evaluator or Full Comparison */}
         {currentView === 'evaluate' && (
           <div style={{ maxWidth: '1280px', margin: '0 auto 40px', padding: '0 24px' }}>
-            <div style={{ margin: '20px 0 24px' }}>
-              <button
-                type="button"
-                onClick={() => setCurrentView('home')}
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                  padding: '6px 14px',
-                  borderRadius: '20px',
-                  border: '1px solid #E2D6C8',
-                  backgroundColor: '#FFFFFF',
-                  color: '#D45A1E',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer',
-                  marginBottom: '8px',
-                }}
-              >
-                ← Back to Home
-              </button>
-              <h2 style={{ margin: 0, fontSize: '28px', fontFamily: "var(--font-serif, 'Playfair Display', serif)", color: '#221C18' }}>
-                Model Evaluation & Comparison Leaderboard
-              </h2>
-              <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#73675E' }}>
-                Compare candidate model performance side-by-side, inspect confusion matrices, regression errors, and 2D PCA cluster embeddings.
-              </p>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '12px',
+                margin: '20px 0 20px',
+              }}
+            >
+              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <button
+                  type="button"
+                  onClick={() => setEvaluateMode('simple')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '20px',
+                    border: evaluateMode === 'simple' ? '2px solid #D45A1E' : '1px solid #E2D6C8',
+                    backgroundColor: evaluateMode === 'simple' ? '#FAF0E8' : '#FFFFFF',
+                    color: evaluateMode === 'simple' ? '#D45A1E' : '#73675E',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  ⚡ Quick Model Evaluation (2-Step)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEvaluateMode('advanced')}
+                  style={{
+                    padding: '8px 18px',
+                    borderRadius: '20px',
+                    border: evaluateMode === 'advanced' ? '2px solid #D45A1E' : '1px solid #E2D6C8',
+                    backgroundColor: evaluateMode === 'advanced' ? '#FAF0E8' : '#FFFFFF',
+                    color: evaluateMode === 'advanced' ? '#D45A1E' : '#73675E',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  📊 Full Comparison Leaderboard
+                </button>
+              </div>
             </div>
 
             <div
               style={{
-                backgroundColor: 'rgba(255, 255, 255, 0.85)',
+                backgroundColor: 'rgba(255, 255, 255, 0.88)',
                 borderRadius: '24px',
                 border: '1.5px solid #EAE0D5',
                 padding: '28px',
                 boxShadow: '0 8px 30px rgba(0, 0, 0, 0.03)',
               }}
             >
-              <EvaluationDashboardView
-                datasetId={activeDatasetId}
-                apiBaseUrl={apiBaseUrl}
-              />
+              {evaluateMode === 'simple' ? (
+                <SimpleEvaluateModelView
+                  datasetId={activeDatasetId}
+                  onNavigateHome={() => setCurrentView('home')}
+                  onViewLeaderboard={() => setEvaluateMode('advanced')}
+                />
+              ) : (
+                <EvaluationDashboardView
+                  datasetId={activeDatasetId}
+                  apiBaseUrl={apiBaseUrl}
+                />
+              )}
             </div>
           </div>
         )}

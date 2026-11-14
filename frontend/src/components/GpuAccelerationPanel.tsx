@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { probeGpuAcceleration, runGpuVramBenchmark, GpuDeviceInfo, GpuBenchmarkResult } from '../services/webgpu';
+import { InfoTooltip } from './InfoTooltip';
 
 export const GpuAccelerationPanel: React.FC = () => {
   const [gpuInfo, setGpuInfo] = useState<GpuDeviceInfo | null>(null);
@@ -62,8 +63,12 @@ export const GpuAccelerationPanel: React.FC = () => {
             ⚡
           </div>
           <div>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1C1917' }}>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1C1917', display: 'flex', alignItems: 'center' }}>
               Hardware & VRAM Acceleration Engine
+              <InfoTooltip
+                title="GPU Acceleration"
+                content="Offloads machine learning computations to your GPU and dedicated VRAM using WebGPU shaders for ultra-fast training and inference."
+              />
             </h3>
             <p style={{ margin: 0, fontSize: '12px', color: '#73675E' }}>
               Harnesses client GPU compute shaders & dedicated VRAM for real-time model training and metrics

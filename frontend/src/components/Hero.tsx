@@ -1,4 +1,5 @@
 import React from 'react';
+import { InfoTooltip } from './InfoTooltip';
 
 interface HeroProps {
   onSelectAction: (action: 'train' | 'evaluate') => void;
@@ -199,9 +200,15 @@ export const Hero: React.FC<HeroProps> = ({ onSelectAction }) => {
                 fontSize: '20px',
                 fontWeight: 700,
                 color: '#1C1917',
+                display: 'flex',
+                alignItems: 'center',
               }}
             >
               Train a Model
+              <InfoTooltip
+                title="Training Workflow"
+                content="Upload your dataset, impute missing values, configure features and targets, and train ML algorithms with GPU acceleration."
+              />
             </h2>
 
             {/* Description */}
@@ -314,9 +321,15 @@ export const Hero: React.FC<HeroProps> = ({ onSelectAction }) => {
                 fontSize: '20px',
                 fontWeight: 700,
                 color: '#1C1917',
+                display: 'flex',
+                alignItems: 'center',
               }}
             >
               Evaluate a Model
+              <InfoTooltip
+                title="Evaluation Workflow"
+                content="Insert your model file and test dataset. Get instant metrics on unseen data without complex configurations."
+              />
             </h2>
 
             {/* Description */}

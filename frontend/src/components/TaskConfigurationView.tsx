@@ -1,5 +1,6 @@
 
 import React, { useState } from 'react';
+import { InfoTooltip } from './InfoTooltip';
 
 // Portion 2: ML Task Routing & Configuration
 // FR-4: Task Selection
@@ -222,24 +223,33 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     >
       <header
         style={{
-          borderBottom: '2px solid #e2e8f0',
+          borderBottom: '2px solid #EAE0D5',
           paddingBottom: '16px',
           marginBottom: '24px',
         }}
       >
-        <h2 style={{ margin: 0, color: '#1e293b' }}>
-          Portion 2: ML Task Routing &amp; Configuration
+        <h2 style={{ margin: 0, color: '#221C18', display: 'flex', alignItems: 'center' }}>
+          Task Routing &amp; Algorithm Configuration
+          <InfoTooltip
+            title="Task Routing"
+            content="Configure which type of machine learning problem to solve, pick an algorithm, and set feature/target variables."
+          />
         </h2>
 
-        <p style={{ margin: '4px 0 0', color: '#64748b' }}>
-          Assigned to: <strong>Satvik Phadke (PES2UG24CS450)</strong> | Service
-          Port: <strong>8002</strong>
+        <p style={{ margin: '4px 0 0', color: '#73675E', fontSize: '14px' }}>
+          Step 2 of 4: Select problem type, model algorithm, and feature targets.
         </p>
       </header>
 
       {/* FR-4: ML Task and Algorithm Selection */}
       <section style={sectionStyle}>
-        <h3>Step 1: Select ML Problem Type (FR-4)</h3>
+        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+          Step 1: Select ML Problem Type
+          <InfoTooltip
+            title="ML Problem Type"
+            content="Classification predicts discrete classes (e.g. Setosa/Versicolor); Regression predicts continuous numbers (e.g. house price); Clustering discovers natural groupings."
+          />
+        </h3>
 
         <p style={{ color: '#64748b', fontSize: '14px' }}>
           Choose the type of machine-learning task you want to perform.
@@ -267,14 +277,14 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
                   padding: '16px',
                   textAlign: 'left',
                   border: selected
-                    ? '2px solid #2563eb'
+                    ? '2px solid #D45A1E'
                     : '1px solid #cbd5e1',
                   borderRadius: '8px',
-                  backgroundColor: selected ? '#eff6ff' : '#fff',
+                  backgroundColor: selected ? '#FAF0E8' : '#fff',
                   cursor: 'pointer',
                 }}
               >
-                <strong style={{ display: 'block', marginBottom: '8px' }}>
+                <strong style={{ display: 'block', marginBottom: '8px', color: selected ? '#D45A1E' : '#221C18' }}>
                   {type.charAt(0).toUpperCase() + type.slice(1)}
                 </strong>
 
@@ -287,8 +297,12 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
         </div>
 
         <div style={{ marginTop: '20px' }}>
-          <label htmlFor="algorithm" style={labelStyle}>
+          <label htmlFor="algorithm" style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
             Algorithm
+            <InfoTooltip
+              title="Machine Learning Algorithm"
+              content="The mathematical model used to learn patterns. Tree models handle tabular data well; Neural Networks and CNNs capture complex feature interactions."
+            />
           </label>
 
           <select
@@ -308,7 +322,13 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
 
       {/* FR-5: Feature and Target Selection */}
       <section style={sectionStyle}>
-        <h3>Step 2: Feature &amp; Target Selection (FR-5)</h3>
+        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+          Step 2: Feature &amp; Target Selection
+          <InfoTooltip
+            title="Features & Targets"
+            content="Features are input variables the model uses as clues. Target is the correct answer you want it to learn how to predict."
+          />
+        </h3>
 
         <p style={{ color: '#64748b', fontSize: '14px' }}>
           Select the columns used as model inputs and the column to predict.
@@ -317,8 +337,12 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
 
         {taskType !== 'clustering' && (
           <div style={{ marginBottom: '20px' }}>
-            <label htmlFor="target-column" style={labelStyle}>
+            <label htmlFor="target-column" style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
               Target column
+              <InfoTooltip
+                title="Target Column"
+                content="The output column you want the model to predict. Must not be included in feature columns."
+              />
             </label>
 
             <select
@@ -336,7 +360,13 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
           </div>
         )}
 
-        <h4 style={{ marginBottom: '12px' }}>Feature columns</h4>
+        <h4 style={{ marginBottom: '12px', display: 'flex', alignItems: 'center' }}>
+          Feature columns
+          <InfoTooltip
+            title="Feature Columns"
+            content="Check the columns that contain relevant input data for training."
+          />
+        </h4>
 
         {featureColumns.length === 0 ? (
           <p style={{ color: '#b45309', fontSize: '14px' }}>
@@ -380,11 +410,21 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
 
       {/* FR-6 and FR-7: Split Ratio and Clustering Parameters */}
       <section style={sectionStyle}>
-        <h3>Step 3: Partitioning &amp; Hyperparameters (FR-6, FR-7)</h3>
+        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+          Step 3: Partitioning &amp; Hyperparameters
+          <InfoTooltip
+            title="Hyperparameters"
+            content="Settings that control how data is split for evaluation or how clusters are configured."
+          />
+        </h3>
 
         <div style={{ marginBottom: '20px' }}>
-          <label htmlFor="test-split" style={labelStyle}>
+          <label htmlFor="test-split" style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
             Test split: {Math.round(testSplitRatio * 100)}%
+            <InfoTooltip
+              title="Test Split"
+              content="The percentage of data held out to test the trained model on unseen examples (typically 20%)."
+            />
           </label>
 
           <input
@@ -407,8 +447,12 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
 
         {taskType === 'clustering' && (
           <div>
-            <label htmlFor="num-clusters" style={labelStyle}>
+            <label htmlFor="num-clusters" style={{ ...labelStyle, display: 'flex', alignItems: 'center' }}>
               Number of clusters (k)
+              <InfoTooltip
+                title="Number of Clusters (k)"
+                content="How many separate groups the K-Means algorithm should partition the points into."
+              />
             </label>
 
             <input

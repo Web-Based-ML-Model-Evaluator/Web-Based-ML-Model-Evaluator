@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { InfoTooltip } from './InfoTooltip';
 
 // ============================================================================
 // PORTION 1: DATA INGESTION & PREPROCESSING
@@ -239,17 +240,29 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
 
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', maxWidth: '1000px', margin: '0 auto' }}>
-      <header style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '24px' }}>
-        <h2 style={{ margin: 0, color: '#1e293b' }}>Portion 1: Data Ingestion & Preprocessing</h2>
-        <p style={{ margin: '4px 0 0', color: '#64748b' }}>
-          Assigned to: <strong>Shreya Ajith (PES2UG24CS480)</strong> | Service Port: <strong>8001</strong>
+      <header style={{ borderBottom: '2px solid #EAE0D5', paddingBottom: '16px', marginBottom: '24px' }}>
+        <h2 style={{ margin: 0, color: '#221C18', display: 'flex', alignItems: 'center' }}>
+          Dataset Ingestion &amp; Preprocessing
+          <InfoTooltip
+            title="Data Preprocessing"
+            content="Upload raw tabular data, inspect columns and statistics, and choose imputation strategies for any missing values before training."
+          />
+        </h2>
+        <p style={{ margin: '4px 0 0', color: '#73675E', fontSize: '14px' }}>
+          Step 1 of 4: Prepare your data for machine learning model training.
         </p>
       </header>
 
       {/* SECTION 1: File Upload Dropzone (FR-1, NFR-4) */}
       <section style={{ padding: '24px', border: '2px dashed #cbd5e1', borderRadius: '8px', textAlign: 'center', marginBottom: '24px' }}>
-        <h3>Step 1: Dataset Upload (FR-1)</h3>
-        <p style={{ color: '#64748b', fontSize: '14px' }}>Select a CSV dataset under 10 MB (NFR-4)</p>
+        <h3 style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          Step 1: Dataset Upload
+          <InfoTooltip
+            title="Dataset Upload"
+            content="Upload a CSV file up to 10 MB. The first row should contain your column headers."
+          />
+        </h3>
+        <p style={{ color: '#64748b', fontSize: '14px' }}>Select a CSV dataset under 10 MB</p>
         <input type="file" accept=".csv" onChange={handleFileChange} />
 
         {file && (
@@ -287,7 +300,13 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
 
       {/* SECTION 2: Dataset Summary & 5-Row Preview (FR-2) */}
       <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '24px' }}>
-        <h3>Step 2: Dataset Preview & Summary (FR-2)</h3>
+        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+          Step 2: Dataset Preview &amp; Summary
+          <InfoTooltip
+            title="Summary & Preview"
+            content="Displays total row and column counts, file size, and the first 5 rows to verify your data was loaded properly."
+          />
+        </h3>
 
         {!uploadResult ? (
           <p style={{ color: '#64748b', fontSize: '14px' }}>Upload a CSV above to see its summary here.</p>
@@ -314,7 +333,13 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
                 <thead>
                   <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
                     <th style={thStyle}>Name</th>
-                    <th style={thStyle}>Type</th>
+                    <th style={thStyle}>
+                      Type
+                      <InfoTooltip
+                        title="Data Type"
+                        content="Numeric columns contain measurable numbers; Categorical columns contain text labels or categories."
+                      />
+                    </th>
                     <th style={thStyle}>Missing</th>
                     <th style={thStyle}>Missing %</th>
                     <th style={thStyle}>Sample values</th>
@@ -362,7 +387,13 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
 
       {/* SECTION 3: Missing Value Imputation (FR-3) */}
       <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
-        <h3>Step 3: Missing Value Imputation (FR-3)</h3>
+        <h3 style={{ display: 'flex', alignItems: 'center' }}>
+          Step 3: Missing Value Imputation
+          <InfoTooltip
+            title="Handling Missing Values"
+            content="Choose how to fill blank cells. Mean/Median for numeric columns, Mode (most common) for text categories, or Drop Column if unneeded."
+          />
+        </h3>
 
         {!uploadResult ? (
           <p style={{ color: '#64748b', fontSize: '14px' }}>Upload a CSV above to choose how to handle missing values.</p>

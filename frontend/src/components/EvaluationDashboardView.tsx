@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { ApiClient } from '../services/api';
+import { InfoTooltip } from './InfoTooltip';
 
 // ============================================================================
 // PORTION 3: MODEL EXECUTION, METRICS & COMPARISON SKELETON
@@ -542,15 +543,21 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   return (
     <div style={{ padding: '24px', fontFamily: 'sans-serif', maxWidth: '1100px', margin: '0 auto' }}>
       {/* Top Header */}
-      <header style={{ borderBottom: '2px solid #e2e8f0', paddingBottom: '16px', marginBottom: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+      <header style={{ borderBottom: '2px solid #EAE0D5', paddingBottom: '16px', marginBottom: '24px' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
           <div>
-            <h2 style={{ margin: 0, color: '#1e293b' }}>Portion 3: Model Execution, Evaluation & Comparison</h2>
-            <p style={{ margin: '4px 0 0', color: '#64748b' }}>
-              Assigned to: <strong>Shreya Patil (PES2UG24CS484)</strong> | Service Port: <strong>8003</strong>
+            <h2 style={{ margin: 0, color: '#221C18', display: 'flex', alignItems: 'center' }}>
+              Model Execution, Evaluation &amp; Comparison
+              <InfoTooltip
+                title="Model Evaluation"
+                content="Analyze model performance metrics, error distributions, confusion matrices, and cluster separations across candidate algorithms."
+              />
+            </h2>
+            <p style={{ margin: '4px 0 0', color: '#73675E', fontSize: '14px' }}>
+              Inspect detailed training performance and side-by-side leaderboard rankings.
             </p>
           </div>
-          {/* Offline Mock Mode Switch */}
+          {/* Offline / Backend Mode Switch */}
           <div
             style={{
               display: 'flex',
@@ -574,7 +581,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               style={{ cursor: 'pointer' }}
             />
             <label htmlFor="mock-mode-toggle" style={{ cursor: 'pointer', fontWeight: 600, color: '#334155' }}>
-              Offline Mock Mode
+              Simulation Mode
             </label>
             <span
               style={{
@@ -586,7 +593,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 fontWeight: 600,
               }}
             >
-              {offlineMockMode ? 'STANDALONE' : ':8003 LIVE'}
+              {offlineMockMode ? 'STANDALONE' : 'LIVE API'}
             </span>
           </div>
         </div>
@@ -642,31 +649,61 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
         <div>
           {/* Regression Performance Metrics Display (Issue 8 / FR-10) */}
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px' }}>
-            <h3 style={{ marginTop: 0 }}>Regression Performance Metrics (FR-10)</h3>
+            <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center' }}>
+              Regression Performance Metrics
+              <InfoTooltip
+                title="Regression Metrics"
+                content="Numerical metrics showing the error margin between predicted values and actual answers."
+              />
+            </h3>
             <p style={{ color: '#64748b', fontSize: '14px', margin: '0 0 16px' }}>
               Mean Absolute Error (MAE), Mean Squared Error (MSE), Root Mean Squared Error (RMSE), and R² score:
             </p>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '16px' }}>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>MEAN ABSOLUTE ERROR (MAE)</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                  MEAN ABSOLUTE ERROR (MAE)
+                  <InfoTooltip
+                    title="Mean Absolute Error"
+                    content="Average size of prediction errors. E.g. an MAE of 2.1 means predictions are off by 2.1 units on average."
+                  />
+                </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
                   {regressionMetrics ? regressionMetrics.mean_absolute_error : '--'}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>MEAN SQUARED ERROR (MSE)</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                  MEAN SQUARED ERROR (MSE)
+                  <InfoTooltip
+                    title="Mean Squared Error"
+                    content="Squares all errors before averaging them, penalizing large outliers heavily."
+                  />
+                </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
                   {regressionMetrics ? regressionMetrics.mean_squared_error : '--'}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>ROOT MEAN SQ ERROR (RMSE)</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                  ROOT MEAN SQ ERROR (RMSE)
+                  <InfoTooltip
+                    title="Root Mean Squared Error"
+                    content="Square root of MSE, measured in the original target variable units."
+                  />
+                </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
                   {regressionMetrics ? regressionMetrics.root_mean_squared_error : '--'}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600 }}>R² SCORE</div>
+                <div style={{ fontSize: '12px', color: '#64748b', fontWeight: 600, display: 'flex', alignItems: 'center' }}>
+                  R² SCORE
+                  <InfoTooltip
+                    title="R² Score"
+                    content="Measures how well model predictions match the actual data spread (1.0 is a perfect fit)."
+                  />
+                </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#16a34a', marginTop: '4px' }}>
                   {regressionMetrics ? regressionMetrics.r2_score : '--'}
                 </div>
@@ -678,7 +715,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#ffffff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <h3 style={{ margin: 0, color: '#0f172a' }}>Step 2: Confusion Matrix Heatmap (FR-9 - Classification)</h3>
+                <h3 style={{ margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center' }}>
+                  Confusion Matrix &amp; Classification Metrics
+                  <InfoTooltip
+                    title="Confusion Matrix"
+                    content="A breakdown table comparing ground-truth classes with predicted classes to see where the model made errors."
+                  />
+                </h3>
                 <p style={{ color: '#64748b', fontSize: '14px', margin: '4px 0 0' }}>
                   Evaluates multi-class prediction accuracy, true positives, and misclassifications across ground-truth classes.
                 </p>
@@ -704,25 +747,49 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
             {/* Classification Summary KPI Cards */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: '12px', marginBottom: '20px' }}>
               <div style={{ padding: '12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0' }}>
-                <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700 }}>ACCURACY</div>
+                <div style={{ fontSize: '11px', color: '#166534', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                  ACCURACY
+                  <InfoTooltip
+                    title="Accuracy"
+                    content="Percentage of test samples the model predicted correctly across all classes."
+                  />
+                </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#15803d', marginTop: '2px' }}>
                   {((confusionMatrix.metrics?.accuracy ?? 0.967) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
-                <div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700 }}>PRECISION (MACRO)</div>
+                <div style={{ fontSize: '11px', color: '#1e40af', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                  PRECISION
+                  <InfoTooltip
+                    title="Precision"
+                    content="Out of all predictions made for a category, how many were genuinely correct."
+                  />
+                </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1d4ed8', marginTop: '2px' }}>
                   {((confusionMatrix.metrics?.precision ?? 0.967) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#faf5ff', borderRadius: '6px', border: '1px solid #e9d5ff' }}>
-                <div style={{ fontSize: '11px', color: '#6b21a8', fontWeight: 700 }}>RECALL (MACRO)</div>
+                <div style={{ fontSize: '11px', color: '#6b21a8', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                  RECALL
+                  <InfoTooltip
+                    title="Recall"
+                    content="Out of all actual items of a category in the data, how many did the model detect."
+                  />
+                </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7e22ce', marginTop: '2px' }}>
                   {((confusionMatrix.metrics?.recall ?? 0.967) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #fde68a' }}>
-                <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 700 }}>F1-SCORE</div>
+                <div style={{ fontSize: '11px', color: '#92400e', fontWeight: 700, display: 'flex', alignItems: 'center' }}>
+                  F1-SCORE
+                  <InfoTooltip
+                    title="F1 Score"
+                    content="Harmonic average balancing precision and recall. Ideal for imbalanced classes."
+                  />
+                </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#b45309', marginTop: '2px' }}>
                   {((confusionMatrix.metrics?.f1_score ?? 0.967) * 100).toFixed(1)}%
                 </div>
@@ -835,7 +902,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
-                <h3 style={{ margin: 0, color: '#0f172a' }}>Step 3: 2D PCA Cluster Scatter Plot (FR-11 - Clustering)</h3>
+                <h3 style={{ margin: 0, color: '#0f172a', display: 'flex', alignItems: 'center' }}>
+                  2D PCA Cluster Scatter Plot
+                  <InfoTooltip
+                    title="PCA Projection"
+                    content="Projects multiple features into the 2 strongest principal components (PC1 vs PC2) to visualize cluster boundaries."
+                  />
+                </h3>
                 <p style={{ color: '#64748b', fontSize: '14px', margin: '4px 0 0' }}>
                   Visualizes unsupervised clustering quality projected onto the first 2 Principal Components (PC1 vs PC2).
                 </p>
@@ -843,17 +916,25 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
 
               {/* Quality Metric Badges */}
               <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px' }}>
+                <div style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px', display: 'flex', alignItems: 'center' }}>
                   <span style={{ color: '#166534', fontWeight: 600 }}>Silhouette Score: </span>
-                  <span style={{ fontWeight: 700, color: '#15803d' }}>
+                  <span style={{ fontWeight: 700, color: '#15803d', marginLeft: '4px' }}>
                     {pcaClustering.silhouette_score ?? 0.725}
                   </span>
+                  <InfoTooltip
+                    title="Silhouette Score"
+                    content="Evaluates cluster tightness and separation. Ranges from -1 to +1; higher indicates dense, well-separated clusters."
+                  />
                 </div>
-                <div style={{ padding: '6px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px' }}>
+                <div style={{ padding: '6px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px', display: 'flex', alignItems: 'center' }}>
                   <span style={{ color: '#1e40af', fontWeight: 600 }}>Davies-Bouldin: </span>
-                  <span style={{ fontWeight: 700, color: '#1d4ed8' }}>
+                  <span style={{ fontWeight: 700, color: '#1d4ed8', marginLeft: '4px' }}>
                     {pcaClustering.davies_bouldin_index ?? 0.65}
                   </span>
+                  <InfoTooltip
+                    title="Davies-Bouldin Index"
+                    content="Measures average similarity between each cluster and its most similar one. Lower values indicate better separation."
+                  />
                 </div>
               </div>
             </div>
