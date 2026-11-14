@@ -40,3 +40,4 @@ impl AppState {
         self.comparison_store.purge_all();
     }
 }
+

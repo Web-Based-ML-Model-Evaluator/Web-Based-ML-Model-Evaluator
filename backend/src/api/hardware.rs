@@ -26,3 +26,4 @@ pub async fn benchmark_hardware() -> Json<serde_json::Value> {
         "acceleration_grade": "A+ (Ultra-Fast Hardware Pipeline)"
     }))
 }
+

@@ -103,3 +103,4 @@ pub fn create_router(state: AppState) -> Router {
         .layer(cors)
         .with_state(state)
 }
+

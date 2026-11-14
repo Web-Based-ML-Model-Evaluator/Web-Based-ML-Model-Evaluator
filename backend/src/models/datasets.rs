@@ -67,3 +67,4 @@ pub struct CleanedDatasetDTO {
     pub data_types: HashMap<String, String>,
     pub records: Vec<HashMap<String, serde_json::Value>>,
 }
+

@@ -60,3 +60,4 @@ pub struct PipelineDispatchResponse {
     pub algorithm: String,
     pub execution_result: Option<serde_json::Value>,
 }
+

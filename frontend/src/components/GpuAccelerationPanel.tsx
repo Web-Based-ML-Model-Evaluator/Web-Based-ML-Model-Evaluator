@@ -159,3 +159,4 @@ export const GpuAccelerationPanel: React.FC = () => {
     </div>
   );
 };
+

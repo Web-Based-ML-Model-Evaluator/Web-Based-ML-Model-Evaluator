@@ -1,79 +1,118 @@
-# Web Based ML Model Evaluator (Team 13)
+# ML Lab — High-Performance Web-Based Machine Learning Platform
 
-**Decoupled 3-Tier Architecture Skeleton & API Design**  
-*Backend: Rust (Axum, Tokio, Serde) | Frontend: TSX (React, TypeScript)*
+**Production-Grade Unified Machine Learning Pipeline with WebGPU Acceleration**  
+*Backend: Rust (Axum, Tokio, Serde, SmartCore) | Frontend: React 18, TypeScript, WebGPU, Vite*
 
 ---
 
-## 1. Team Allocation & The 3 Project Portions
+## 1. System Overview
 
-Based on the 4 project specification documents (SRS, Proposal, SASD, and STP), the system is divided into **3 cleanly isolated portions** with dedicated API contracts:
+ML Lab is a high-performance web platform designed to ingest datasets, preprocess and impute missing values, configure and route machine learning tasks, train supervised and unsupervised models with hardware acceleration, and compare model metrics on a real-time leaderboard.
+
+### Architecture Highlights:
+- **Zero-Latency Unified In-Memory Pipeline:** All data processing, configuration validation, and model execution occur directly in memory inside a single cohesive Rust process (`backend/`), eliminating unnecessary inter-service network hops.
+- **Client GPU & VRAM Acceleration (WebGPU):** Directly utilizes the user's browser GPU (NVIDIA, AMD, Intel, Apple Silicon) and dedicated VRAM using WGSL compute shaders for instant distance matrix evaluations, clustering, and matrix operations.
+- **Warm Parchment Aesthetic UI:** Handcrafted editorial aesthetic with tactile parchment texture background, serif typography, decorative framing brackets, and clean responsive action cards matching the exact design specification.
+- **Session Memory Security (SEC-1 / SEC-3):** Pure in-memory session isolation ensuring zero persistent data is retained upon session purge.
+
+---
+
+## 2. Directory Structure
 
 ```
-[Portion 1: Shreya Ajith]            [Portion 2: Satvik Phadke]            [Portion 3: Shreya Patil]
-   (:8001 / Rust + TSX)                 (:8002 / Rust + TSX)                 (:8003 / Rust + TSX)
-+-------------------------+          +-------------------------+          +-------------------------+
-| Data Ingestion &        |  REST    | ML Task Routing &       |  REST    | Model Execution,        |
-| Preprocessing Skeleton  | -------> | Configuration Skeleton  | -------> | Evaluation & Comparison |
-| (FR-1, FR-2, FR-3)      |          | (FR-4, FR-5, FR-6, FR-7)|          | (FR-8 to FR-12)         |
-+-------------------------+          +-------------------------+          +-------------------------+
+├── backend/                       # Production Unified Rust Backend & ML Engine
+│   ├── Cargo.toml                 # Serde, Axum, Tokio, SmartCore, CSV, Tracing
+│   ├── src/
+│   │   ├── main.rs               # Server entry point (port 8000 + compat listeners)
+│   │   ├── lib.rs                # Library module exports
+│   │   ├── state.rs              # Thread-safe in-memory session state (RAM)
+│   │   ├── api/                  # Unified REST API controllers
+│   │   │   ├── datasets.rs       # Ingestion, validation, preview, preprocessing, schema
+│   │   │   ├── routing.rs        # Task routing, config validation, pipeline dispatch
+│   │   │   ├── models.rs         # Model training, evaluation, metrics
+│   │   │   ├── comparison.rs     # Multi-model leaderboard & ranking
+│   │   │   └── hardware.rs       # GPU/VRAM hardware diagnostics & benchmarks
+│   │   ├── core/                 # Compute & algorithmic core
+│   │   │   ├── validator.rs      # CSV and schema validation
+│   │   │   ├── preprocessing.rs  # Missing value imputation (Mean, Median, Mode, Drop)
+│   │   │   ├── router_validation.rs # Parameter & split boundary validation
+│   │   │   └── ml/               # Machine Learning & PCA algorithms
+│   │   │       ├── algorithms.rs # Classifiers, Regressors, K-Means
+│   │   │       ├── metrics.rs    # Confusion matrix, MAE/RMSE/R², Silhouette, Davies-Bouldin
+│   │   │       └── hardware_accel.rs # Hardware probe & acceleration diagnostics
+│   │   └── models/               # Strongly-typed Serde DTOs & Error contracts
+│   └── tests/                    # 108 Comprehensive Unit and Integration Tests
+│
+├── frontend/                      # Modern React + TypeScript + WebGPU Client
+│   ├── index.html                # Typography (Playfair Display & Inter), textured canvas
+│   ├── vite.config.mjs           # Lightning-fast Vite bundler (~240ms builds)
+│   └── src/
+│       ├── index.tsx             # Client bootstrap
+│       ├── App.tsx               # Main stateful application controller
+│       ├── components/
+│       │   ├── Navbar.tsx        # Stacked orange diamonds logo & user profile avatar
+│       │   ├── Hero.tsx          # Decorative corner brackets, serif title with brush underline
+│       │   ├── GpuAccelerationPanel.tsx # WebGPU status, VRAM monitor, shader benchmark
+│       │   ├── DatasetIngestionView.tsx # Data upload, preview, imputation
+│       │   ├── TaskConfigurationView.tsx# Task selection, feature/target configuration
+│       │   └── EvaluationDashboardView.tsx # Execution metrics, heatmap, 2D PCA, leaderboard
+│       ├── services/
+│       │   ├── api.ts            # Consolidated API client
+│       │   └── webgpu.ts         # Browser WebGPU / VRAM execution engine (WGSL compute shaders)
+│       └── styles/
+│           └── theme.css         # Warm parchment color, tactile paper fiber texture
+│
+├── documents/                     # Consolidated project documentation
+│   ├── Team13_Consolidated_Documentation.pdf # All 4 project specifications in one 41-page PDF
+│   ├── Functional_Requirements_Team13.pdf
+│   ├── SRS_Team_13.pdf
+│   ├── Team13_SASD.pdf
+│   └── test_plan_team_13.pdf
+│
+├── docs/                          # Architecture & API specifications
+│   ├── API_SPECIFICATION.md
+│   ├── ARCHITECTURE_AND_RESPONSIBILITY_MATRIX.md
+│   └── TECH_STACK_AUDIT_REPORT.md
+│
+├── Cargo.toml                     # Root workspace Cargo manifest
+├── package.json                   # Unified development and build scripts
+└── vite.config.mjs                # Bundler configuration
 ```
 
-### Summary of Portions:
-| Folder | Assigned Teammate | Assigned Requirements | Service Port | Scope & Responsibility Skeleton |
-| :--- | :--- | :--- | :--- | :--- |
-| **`portion1_data_ingestion_preprocessing/`** | **Shreya Ajith** (`PES2UG24CS480`) | **FR-1, FR-2, FR-3, NFR-4** | `8001` | CSV upload, 10MB limit enforcement, dataset summary preview, missing value imputation rules, and cleaned data JSON contract. |
-| **`portion2_task_routing_configuration/`** | **Satvik Phadke** (`PES2UG24CS450`) | **FR-4, FR-5, FR-6, FR-7, NFR-2** | `8002` | ML problem type selector (Classification, Regression, Clustering), feature/target selectors, train/test split slider, and configuration validation. |
-| **`portion3_model_execution_evaluation/`** | **Shreya Patil** (`PES2UG24CS484`) | **FR-8, FR-9, FR-10, FR-11, FR-12, NFR-1** | `8003` | Model training engine (8 algorithms), classification metrics & confusion matrix, regression metrics, clustering silhouette & 2D PCA plots, and side-by-side comparison dashboard. |
-| **System Architecture & QA** | **Sanyam Devan Hiran** (`PES2UG24CS446`) | **FR-13 (Error Handling), STP, RTM** | All | API contract baselining, cross-module integration tests, error schema enforcement. |
+---
+
+## 3. Quick Start & Execution
+
+### Prerequisites
+- **Rust:** `1.80+` (Cargo)
+- **Node.js:** `v18+` (npm)
+
+### Run Backend
+```bash
+# Starts the high-performance unified server on http://localhost:8000
+npm run start:backend
+```
+
+### Run Frontend
+```bash
+# Starts the Vite development server on http://localhost:3000
+npm run dev
+```
+
+### Run Full Test Suite
+```bash
+# Runs all 108 backend tests and TypeScript typecheck
+npm run test:all
+```
+
+### Build for Production
+```bash
+# Compiles optimized frontend bundle (dist/)
+npm run build
+```
 
 ---
 
-## 2. Tech Stack Audit: Discrepancy in the 4 Documents
-
-> [!WARNING]
-> **Discrepancy Found:** In **Document 4 (Software Test Plan - STP)**, Section 6 mistakenly lists `Python 3, FastAPI, pandas, scikit-learn`, and Section 4 mentions `python libraries (scikit, numpy)`.
-> 
-> However, **Document 3 (SASD)** correctly specifies **Rust (Axum/Actix-Web, Polars, Linfa)** for the backend and **TSX (React/TypeScript)** for the frontend.
-> 
-> As confirmed, **Rust + TSX is the true tech stack**. Detailed audit and correction guidance can be found in [`docs/TECH_STACK_AUDIT_REPORT.md`](file:///c:/B.Tech/Fifth_sem/SE/ite1/docs/TECH_STACK_AUDIT_REPORT.md).
-
----
-
-## 3. How the 3 Portions Communicate via APIs
-
-The services communicate over local HTTP REST endpoints:
-
-1. **Shreya's Service (`:8001`)** ingests and cleans the dataset:
-   - `POST /api/v1/datasets/upload`: Ingests raw CSV and validates `< 10MB`.
-   - `POST /api/v1/datasets/{id}/preprocess`: Applies missing value rules and produces cleaned dataset.
-   - `GET  /api/v1/datasets/{id}/data`: Exposes cleaned dataset JSON to downstream services.
-   - `GET  /api/v1/datasets/{id}/schema`: Exposes column names and inferred data types.
-
-2. **Satvik's Service (`:8002`)** validates user choices against Shreya's schema:
-   - `GET  /api/v1/config/tasks`: Lists supported tasks and permitted algorithms.
-   - `POST /api/v1/config/validate`: Validates target variable, feature list, and split ratios.
-   - `POST /api/v1/pipeline/dispatch`: Fetches cleaned dataset from Portion 1 (`:8001`) and forwards it with the validated config to Portion 3 (`:8003`).
-
-3. **Shreya's Service (`:8003`)** executes models and generates visualizations:
-   - `POST /api/v1/models/execute`: Fits algorithm, partitions train/test, calculates metrics (Accuracy, Confusion Matrix, MAE, R², Silhouette, 2D PCA points).
-   - `GET  /api/v1/models/comparison/{session_id}`: Side-by-side model comparison dashboard.
-
----
-
-## 4. Strict Developer Separation & Mock Fallbacks
-
-To ensure **no teammate is blocked by someone else**:
-- **Independent Ports:** Ports `8001`, `8002`, and `8003` run separately.
-- **Built-in Mock Fallbacks:** In `portion2_.../src/client.rs` and `portion3_.../src/handlers.rs`, if other servers are offline, the code automatically uses fixtures in `contracts/fixtures/` so each teammate can build their logic in complete isolation!
-- **UI Mock Mode Toggle:** Every TSX component (`DatasetIngestionView.tsx`, `TaskConfigurationView.tsx`, `EvaluationDashboardView.tsx`) includes an "Offline Mock Mode" toggle.
-
----
-
-## 5. Project Documentation Map
-
-- [**Tech Stack Audit Report**](file:///c:/B.Tech/Fifth_sem/SE/ite1/docs/TECH_STACK_AUDIT_REPORT.md): Analysis of Python vs Rust discrepancy in Document 4.
-- [**Architecture & Responsibility Matrix**](file:///c:/B.Tech/Fifth_sem/SE/ite1/docs/ARCHITECTURE_AND_RESPONSIBILITY_MATRIX.md): Detailed ownership, FR-1 to FR-13 mapping, and pipeline flow.
-- [**REST API Specification**](file:///c:/B.Tech/Fifth_sem/SE/ite1/docs/API_SPECIFICATION.md): Full documentation of all endpoints, JSON request/response formats, and error models.
-- [**Developer Isolation & Integration Guide**](file:///c:/B.Tech/Fifth_sem/SE/ite1/docs/DEVELOPER_ISOLATION_AND_INTEGRATION_GUIDE.md): Guide for teammates on developing independently without merge conflicts.
-- [**Unified API Contract**](file:///c:/B.Tech/Fifth_sem/SE/ite1/contracts/unified_api_contract.json): JSON schema defining all shared DTOs and endpoints.
+## 4. Documentation
+All project specifications (Functional Requirements, SRS, System Architecture, and Test Plan) are merged into a single consolidated document located at:
+- [`documents/Team13_Consolidated_Documentation.pdf`](file:///c:/B.Tech/Fifth_sem/SE/ite1/documents/Team13_Consolidated_Documentation.pdf)

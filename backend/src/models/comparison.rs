@@ -25,3 +25,4 @@ pub struct ComparisonReport {
     pub metrics_table: HashMap<String, HashMap<String, f64>>,
     pub ranking: Vec<ModelRankEntry>,
 }
+

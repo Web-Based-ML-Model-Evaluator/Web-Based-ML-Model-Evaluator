@@ -374,3 +374,4 @@ export const Hero: React.FC<HeroProps> = ({ onSelectAction }) => {
     </section>
   );
 };
+
