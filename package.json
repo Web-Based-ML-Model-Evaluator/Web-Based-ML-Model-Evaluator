@@ -7,11 +7,11 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "start": "cargo run --manifest-path backend/Cargo.toml",
-    "start:backend": "cargo run --manifest-path backend/Cargo.toml",
-    "test": "cargo test --manifest-path backend/Cargo.toml --offline",
-    "test:backend": "cargo test --manifest-path backend/Cargo.toml --offline",
-    "test:all": "cargo test --workspace --offline && npm run typecheck",
+    "start": "node scripts/cargo-runner.js run --manifest-path backend/Cargo.toml",
+    "start:backend": "node scripts/cargo-runner.js run --manifest-path backend/Cargo.toml",
+    "test": "node scripts/cargo-runner.js test --manifest-path backend/Cargo.toml --offline",
+    "test:backend": "node scripts/cargo-runner.js test --manifest-path backend/Cargo.toml --offline",
+    "test:all": "node scripts/cargo-runner.js test --workspace --offline && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
