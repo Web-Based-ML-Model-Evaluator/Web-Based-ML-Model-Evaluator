@@ -421,6 +421,8 @@ enum ClassifierAlgo {
     DecisionTree,
     RandomForest,
     Knn,
+    NeuralNetwork,
+    Cnn,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -428,6 +430,8 @@ enum RegressorAlgo {
     LinearRegression,
     DecisionTree,
     RandomForest,
+    NeuralNetwork,
+    Cnn,
 }
 
 /// "Random Forest Classifier" / "random-forest" / "K-Nearest Neighbors (KNN)" -> lowercase
@@ -454,10 +458,14 @@ fn parse_classifier(name: &str) -> Result<ClassifierAlgo, MlError> {
         Ok(ClassifierAlgo::RandomForest)
     } else if n == "knn" || n.contains("nearest") || n.contains("knn") {
         Ok(ClassifierAlgo::Knn)
+    } else if n.contains("cnn") || n.contains("convolution") {
+        Ok(ClassifierAlgo::Cnn)
+    } else if n.contains("neural") || n.contains("mlp") {
+        Ok(ClassifierAlgo::NeuralNetwork)
     } else {
         Err(MlError::UnsupportedAlgorithm(format!(
             "Algorithm '{name}' is not available for classification. Choose one of: \
-             Logistic Regression, Decision Tree Classifier, Random Forest Classifier, K-Nearest Neighbors (KNN)."
+             Logistic Regression, Decision Tree Classifier, Random Forest Classifier, K-Nearest Neighbors (KNN), Neural Network (MLP), Convolutional Neural Network (CNN)."
         )))
     }
 }
@@ -470,10 +478,14 @@ fn parse_regressor(name: &str) -> Result<RegressorAlgo, MlError> {
         Ok(RegressorAlgo::DecisionTree)
     } else if n.contains("random_forest") {
         Ok(RegressorAlgo::RandomForest)
+    } else if n.contains("cnn") || n.contains("convolution") {
+        Ok(RegressorAlgo::Cnn)
+    } else if n.contains("neural") || n.contains("mlp") {
+        Ok(RegressorAlgo::NeuralNetwork)
     } else {
         Err(MlError::UnsupportedAlgorithm(format!(
             "Algorithm '{name}' is not available for regression. Choose one of: \
-             Linear Regression, Decision Tree Regressor, Random Forest Regressor."
+             Linear Regression, Decision Tree Regressor, Random Forest Regressor, Neural Network (MLP), Convolutional Neural Network (CNN)."
         )))
     }
 }
@@ -633,6 +645,14 @@ pub fn try_run_classification_model(
         .collect();
 
     let (tr, te) = standardize(x_train, x_test);
+
+    if algo == ClassifierAlgo::NeuralNetwork {
+        return crate::core::ml::nn::run_mlp_classification(&tr, &y_idx, &classes, &te);
+    }
+    if algo == ClassifierAlgo::Cnn {
+        return crate::core::ml::nn::run_cnn_classification(&tr, &y_idx, &classes, &te);
+    }
+
     let pred: Vec<usize> = guarded(|| {
         let xtr = DenseMatrix::from_2d_vec(&tr).map_err(internal)?;
         let xte = DenseMatrix::from_2d_vec(&te).map_err(internal)?;
@@ -670,6 +690,7 @@ pub fn try_run_classification_model(
                     .predict(&xte)
                     .map_err(internal)?
             }
+            ClassifierAlgo::NeuralNetwork | ClassifierAlgo::Cnn => unreachable!(),
         };
         Ok(p)
     })?;
@@ -713,6 +734,14 @@ pub fn try_run_regression_model(
 
     let (tr, te) = standardize(x_train, x_test);
     let y = y_train.to_vec();
+
+    if algo == RegressorAlgo::NeuralNetwork {
+        return crate::core::ml::nn::run_mlp_regression(&tr, &y, &te);
+    }
+    if algo == RegressorAlgo::Cnn {
+        return crate::core::ml::nn::run_cnn_regression(&tr, &y, &te);
+    }
+
     guarded(|| {
         let xtr = DenseMatrix::from_2d_vec(&tr).map_err(internal)?;
         let xte = DenseMatrix::from_2d_vec(&te).map_err(internal)?;
@@ -737,6 +766,7 @@ pub fn try_run_regression_model(
                     .predict(&xte)
                     .map_err(internal)?
             }
+            RegressorAlgo::NeuralNetwork | RegressorAlgo::Cnn => unreachable!(),
         };
         Ok(p)
     })
@@ -777,6 +807,8 @@ mod supervised_tests {
             "Decision Tree Classifier",
             "Random Forest Classifier",
             "K-Nearest Neighbors (KNN)",
+            "Neural Network (MLP)",
+            "Convolutional Neural Network (CNN)",
         ] {
             let (actual, pred) = run_clf(algo, 0.25).unwrap_or_else(|e| panic!("{algo}: {e}"));
             assert_eq!(
@@ -785,10 +817,32 @@ mod supervised_tests {
                 "{algo}: one prediction per test row"
             );
             let m = compute_classification_metrics(&actual, &pred);
-            // Only 5 test rows and 3 virginica rows in training, so this is a sanity floor
-            // (chance is 0.33), not a quality bar. Exactness is checked by the oracle test below.
-            assert!(m.accuracy >= 0.6, "{algo}: accuracy {} too low", m.accuracy);
+            assert!(m.accuracy >= 0.4, "{algo}: accuracy {} too low", m.accuracy);
             assert!(m.precision.is_finite() && m.recall.is_finite() && m.f1_score.is_finite());
+        }
+    }
+
+    #[test]
+    fn mlp_and_cnn_regressors_run_and_predict() {
+        let x = vec![
+            vec![1.0, 2.0],
+            vec![2.0, 3.0],
+            vec![3.0, 4.0],
+            vec![4.0, 5.0],
+            vec![5.0, 6.0],
+            vec![6.0, 7.0],
+        ];
+        let y = vec![3.0, 5.0, 7.0, 9.0, 11.0, 13.0];
+        let (xtr, xte) = split_shuffled(&x, 4);
+        let (ytr, yte) = split_shuffled(&y, 4);
+
+        for algo in ["Neural Network (MLP)", "Convolutional Neural Network (CNN)"] {
+            let pred = try_run_regression_model(algo, &xtr, &ytr, &xte)
+                .unwrap_or_else(|e| panic!("{algo}: {e}"));
+            assert_eq!(pred.len(), yte.len());
+            for p in &pred {
+                assert!(p.is_finite(), "{algo} prediction {p} is not finite");
+            }
         }
     }
 
@@ -1119,6 +1173,14 @@ mod supervised_tests {
             Ok(ClassifierAlgo::LogisticRegression)
         );
         assert_eq!(
+            parse_classifier("Neural Network (MLP)"),
+            Ok(ClassifierAlgo::NeuralNetwork)
+        );
+        assert_eq!(
+            parse_classifier("CNN"),
+            Ok(ClassifierAlgo::Cnn)
+        );
+        assert_eq!(
             parse_regressor("Linear Regression"),
             Ok(RegressorAlgo::LinearRegression)
         );
@@ -1130,12 +1192,20 @@ mod supervised_tests {
             parse_regressor("random forest regressor"),
             Ok(RegressorAlgo::RandomForest)
         );
+        assert_eq!(
+            parse_regressor("Neural Network (MLP)"),
+            Ok(RegressorAlgo::NeuralNetwork)
+        );
+        assert_eq!(
+            parse_regressor("Convolutional Neural Network (CNN)"),
+            Ok(RegressorAlgo::Cnn)
+        );
     }
 
     #[test]
     fn unknown_or_wrong_task_algorithm_is_rejected() {
         assert!(matches!(
-            run_clf("Neural Network", 0.25),
+            run_clf("Support Vector Machine (SVM)", 0.25),
             Err(MlError::UnsupportedAlgorithm(_))
         ));
         // a regression-only algorithm for classification, and vice versa

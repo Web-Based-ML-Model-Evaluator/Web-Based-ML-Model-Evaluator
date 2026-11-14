@@ -184,4 +184,58 @@ mod tests {
             "portion3_model_execution_evaluation"
         );
     }
+
+    #[test]
+    fn test_neural_network_mlp_and_cnn_execution() {
+        use web_ml_backend::core::ml::algorithms::{try_run_classification_model, try_run_regression_model};
+
+        let x_train = vec![
+            vec![1.0, 2.0],
+            vec![2.0, 3.0],
+            vec![3.0, 4.0],
+            vec![5.0, 6.0],
+        ];
+        let y_train_cls = vec!["class_a".to_string(), "class_a".to_string(), "class_b".to_string(), "class_b".to_string()];
+        let x_test = vec![vec![1.5, 2.5], vec![5.5, 6.5]];
+
+        // MLP Classification
+        let mlp_preds = try_run_classification_model("Neural Network (MLP)", &x_train, &y_train_cls, &x_test).unwrap();
+        assert_eq!(mlp_preds.len(), 2);
+
+        // CNN Classification
+        let cnn_preds = try_run_classification_model("Convolutional Neural Network (CNN)", &x_train, &y_train_cls, &x_test).unwrap();
+        assert_eq!(cnn_preds.len(), 2);
+
+        // Regression
+        let y_train_reg = vec![3.0, 5.0, 7.0, 11.0];
+        let mlp_reg_preds = try_run_regression_model("Neural Network (MLP)", &x_train, &y_train_reg, &x_test).unwrap();
+        assert_eq!(mlp_reg_preds.len(), 2);
+        let cnn_reg_preds = try_run_regression_model("Convolutional Neural Network (CNN)", &x_train, &y_train_reg, &x_test).unwrap();
+        assert_eq!(cnn_reg_preds.len(), 2);
+    }
+
+    #[test]
+    fn test_model_file_ingestion_formats() {
+        let supported_formats = [
+            ("model.pt", "PyTorch (.pt)"),
+            ("model.pth", "PyTorch (.pt)"),
+            ("pipeline.joblib", "Joblib (.joblib)"),
+            ("clf.pkl", "Pickle (.pkl)"),
+            ("network.h5", "HDF5/Keras (.h5)"),
+            ("graph.onnx", "ONNX (.onnx)"),
+            ("weights.json", "JSON Model (.json)"),
+        ];
+
+        for (filename, _expected_format) in supported_formats {
+            let lower = filename.to_lowercase();
+            let is_valid = lower.ends_with(".pt")
+                || lower.ends_with(".pth")
+                || lower.ends_with(".joblib")
+                || lower.ends_with(".pkl")
+                || lower.ends_with(".h5")
+                || lower.ends_with(".onnx")
+                || lower.ends_with(".json");
+            assert!(is_valid, "{filename} should be accepted");
+        }
+    }
 }

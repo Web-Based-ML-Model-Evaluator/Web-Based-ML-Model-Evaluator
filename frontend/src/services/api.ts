@@ -157,5 +157,54 @@ export const ApiClient = {
     });
     return res.json();
   },
+
+  // Model Ingestion & Evaluation (Issues #31, #32)
+  async uploadModel(file: File, taskType = 'classification', architecture = ''): Promise<any> {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('task_type', taskType);
+    if (architecture) {
+      formData.append('architecture', architecture);
+    }
+    const res = await fetch(`${API_BASE}/api/v1/models/upload`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Model upload failed (${res.status})`);
+    }
+    return res.json();
+  },
+
+  async listIngestedModels(): Promise<any[]> {
+    const res = await fetch(`${API_BASE}/api/v1/models/ingested`);
+    if (!res.ok) return [];
+    return res.json();
+  },
+
+  async evaluateIngestedModel(
+    modelId: string,
+    datasetId: string,
+    targetColumn?: string,
+    featureColumns: string[] = []
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE}/api/v1/models/evaluate-ingested`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model_id: modelId,
+        dataset_id: datasetId,
+        target_column: targetColumn,
+        feature_columns: featureColumns,
+      }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error?.message || `Model evaluation failed (${res.status})`);
+    }
+    return res.json();
+  },
 };
+
 

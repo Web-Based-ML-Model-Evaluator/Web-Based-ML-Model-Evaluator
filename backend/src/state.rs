@@ -1,7 +1,7 @@
 use crate::core::comparison_store::ComparisonStore;
 use crate::core::ml::hardware_accel::HardwareStatus;
 use crate::core::preprocessing::RawDataset;
-use crate::models::{CleanedDatasetDTO, DatasetUploadResponse};
+use crate::models::{CleanedDatasetDTO, DatasetUploadResponse, IngestedModelMetadata};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
 
@@ -12,6 +12,7 @@ pub struct AppState {
     pub cleaned_datasets: Arc<RwLock<HashMap<String, CleanedDatasetDTO>>>,
     pub comparison_store: ComparisonStore,
     pub hardware_status: HardwareStatus,
+    pub ingested_models: Arc<RwLock<HashMap<String, IngestedModelMetadata>>>,
 }
 
 impl Default for AppState {
@@ -22,6 +23,7 @@ impl Default for AppState {
             cleaned_datasets: Arc::new(RwLock::new(HashMap::new())),
             comparison_store: ComparisonStore::default(),
             hardware_status: HardwareStatus::probe(),
+            ingested_models: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 }
@@ -37,7 +39,9 @@ impl AppState {
         if let Ok(mut c) = self.cleaned_datasets.write() {
             c.clear();
         }
+        if let Ok(mut m) = self.ingested_models.write() {
+            m.clear();
+        }
         self.comparison_store.purge_all();
     }
 }
-

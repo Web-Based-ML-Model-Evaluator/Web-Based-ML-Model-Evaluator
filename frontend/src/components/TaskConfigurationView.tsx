@@ -23,11 +23,15 @@ const algorithmsByTask: Record<TaskType, string[]> = {
     'Decision Tree Classifier',
     'Random Forest Classifier',
     'K-Nearest Neighbors (KNN)',
+    'Neural Network (MLP)',
+    'Convolutional Neural Network (CNN)',
   ],
   regression: [
     'Linear Regression',
     'Decision Tree Regressor',
     'Random Forest Regressor',
+    'Neural Network (MLP)',
+    'Convolutional Neural Network (CNN)',
   ],
   clustering: ['K-Means Clustering'],
 };

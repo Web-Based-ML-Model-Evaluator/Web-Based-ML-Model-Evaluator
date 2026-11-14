@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { ApiClient } from '../services/api';
 
 // ============================================================================
 // PORTION 3: MODEL EXECUTION, METRICS & COMPARISON SKELETON
@@ -269,7 +270,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   confusionMatrix = DEFAULT_CONFUSION_MATRIX,
   pcaClustering = DEFAULT_PCA_CLUSTERING,
 }) => {
-  const [activeTab, setActiveTab] = useState<'results' | 'comparison'>('results');
+  const [activeTab, setActiveTab] = useState<'results' | 'comparison' | 'ingest'>('results');
   const [showPercentages, setShowPercentages] = useState<boolean>(false);
   const [hoveredPoint, setHoveredPoint] = useState<PcaPoint | null>(null);
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<number | 'all'>('all');
@@ -286,6 +287,71 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [taskFilter, setTaskFilter] = useState<'All' | 'Classification' | 'Regression' | 'Clustering'>('All');
+
+  // Model Ingestion State (Issues #31, #32, #33)
+  const [ingestedModels, setIngestedModels] = useState<any[]>([]);
+  const [modelFile, setModelFile] = useState<File | null>(null);
+  const [ingestTaskType, setIngestTaskType] = useState<string>('classification');
+  const [ingestArch, setIngestArch] = useState<string>('');
+  const [ingesting, setIngesting] = useState<boolean>(false);
+  const [ingestSuccess, setIngestSuccess] = useState<string | null>(null);
+  const [selectedModelId, setSelectedModelId] = useState<string>('');
+  const [testDatasetId, setTestDatasetId] = useState<string>(datasetId);
+  const [evaluatingIngested, setEvaluatingIngested] = useState<boolean>(false);
+  const [ingestedEvalResult, setIngestedEvalResult] = useState<any | null>(null);
+
+  useEffect(() => {
+    ApiClient.listIngestedModels()
+      .then((models) => {
+        if (models && models.length > 0) {
+          setIngestedModels(models);
+          setSelectedModelId(models[0].model_id);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleUploadModel = async () => {
+    if (!modelFile) {
+      setError('Please select a model file (.pt, .joblib, .pkl, .h5, .onnx) first.');
+      return;
+    }
+    setIngesting(true);
+    setError(null);
+    setIngestSuccess(null);
+    try {
+      const res = await ApiClient.uploadModel(modelFile, ingestTaskType, ingestArch);
+      setIngestedModels((prev) => [res, ...prev]);
+      setSelectedModelId(res.model_id);
+      setIngestSuccess(`Model '${res.filename}' (${res.file_format}) ingested successfully.`);
+      setModelFile(null);
+    } catch (err: any) {
+      setError(`Model upload failed: ${err.message}`);
+    } finally {
+      setIngesting(false);
+    }
+  };
+
+  const handleEvaluateIngestedModel = async () => {
+    if (!selectedModelId) {
+      setError('Please select an ingested model to evaluate.');
+      return;
+    }
+    setEvaluatingIngested(true);
+    setError(null);
+    try {
+      const res = await ApiClient.evaluateIngestedModel(selectedModelId, testDatasetId);
+      setIngestedEvalResult(res);
+      if (res.comparison_entry) {
+        setComparisonRuns((prev) => [res.comparison_entry, ...prev]);
+        setSelectedExecutionIds((prev) => [res.comparison_entry.execution_id, ...prev]);
+      }
+    } catch (err: any) {
+      setError(`Ingested model evaluation failed: ${err.message}`);
+    } finally {
+      setEvaluatingIngested(false);
+    }
+  };
 
   // Fetch comparison runs from backend or fallback to mock fixtures (FR-12)
   const fetchComparisonRuns = useCallback(async () => {
@@ -554,6 +620,20 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
             }}
           >
             Model Comparison Dashboard (FR-12)
+          </button>
+          <button
+            onClick={() => setActiveTab('ingest')}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '6px',
+              fontWeight: 600,
+              cursor: 'pointer',
+              border: activeTab === 'ingest' ? '2px solid #2563eb' : '1px solid #cbd5e1',
+              backgroundColor: activeTab === 'ingest' ? '#eff6ff' : '#ffffff',
+              color: activeTab === 'ingest' ? '#1d4ed8' : '#475569',
+            }}
+          >
+            Ingest & Evaluate Model (.pt, .joblib, .pkl, .h5, .onnx)
           </button>
         </div>
       </header>
@@ -1579,6 +1659,486 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               </section>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Model Ingestion & Evaluation Tab (Issues #19, #20, #31, #32, #33) */}
+      {activeTab === 'ingest' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+          {ingestSuccess && (
+            <div
+              style={{
+                padding: '12px 16px',
+                backgroundColor: '#F0FDF4',
+                border: '1px solid #BBF7D0',
+                borderRadius: '8px',
+                color: '#166534',
+                fontSize: '14px',
+                fontWeight: 600,
+              }}
+            >
+              ✓ {ingestSuccess}
+            </div>
+          )}
+          {error && (
+            <div
+              style={{
+                padding: '12px 16px',
+                backgroundColor: '#FEF2F2',
+                border: '1px solid #FECACA',
+                borderRadius: '8px',
+                color: '#991B1B',
+                fontSize: '14px',
+                fontWeight: 600,
+              }}
+            >
+              ⚠ {error}
+            </div>
+          )}
+
+          {/* Model File Ingestion Card (Issue #19, #31) */}
+          <section
+            style={{
+              padding: '24px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              backgroundColor: '#ffffff',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 8px', color: '#0f172a' }}>
+              1. Ingest Pre-Trained Model File (Issue #19 / FR-8)
+            </h3>
+            <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748b' }}>
+              Upload your pre-trained model weights. Supported formats include:{' '}
+              <strong>PyTorch (.pt, .pth)</strong>, <strong>Joblib (.joblib)</strong>,{' '}
+              <strong>Pickle (.pkl)</strong>, <strong>Keras / HDF5 (.h5)</strong>, and{' '}
+              <strong>ONNX (.onnx)</strong>.
+            </p>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: '16px',
+                alignItems: 'end',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Model Weights File
+                </label>
+                <input
+                  type="file"
+                  accept=".pt,.pth,.joblib,.pkl,.pickle,.h5,.hdf5,.onnx,.json"
+                  onChange={(e) => setModelFile(e.target.files?.[0] || null)}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '8px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                  }}
+                />
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Task Type
+                </label>
+                <select
+                  value={ingestTaskType}
+                  onChange={(e) => setIngestTaskType(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    backgroundColor: '#ffffff',
+                  }}
+                >
+                  <option value="classification">Classification</option>
+                  <option value="regression">Regression</option>
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Architecture / Notes (Optional)
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. ResNet-18, RandomForest, MLP"
+                  value={ingestArch}
+                  onChange={(e) => setIngestArch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                  }}
+                />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleUploadModel}
+                  disabled={ingesting || !modelFile}
+                  style={{
+                    width: '100%',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: modelFile ? '#D45A1E' : '#94a3b8',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    cursor: modelFile ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {ingesting ? 'Ingesting Model...' : 'Ingest Model File'}
+                </button>
+              </div>
+            </div>
+          </section>
+
+          {/* Model Evaluation on Test Dataset Card (Issue #20, #32, #33) */}
+          <section
+            style={{
+              padding: '24px',
+              border: '1px solid #e2e8f0',
+              borderRadius: '12px',
+              backgroundColor: '#ffffff',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            }}
+          >
+            <h3 style={{ margin: '0 0 8px', color: '#0f172a' }}>
+              2. Evaluate Ingested Model on Test Dataset (Issue #20 / FR-9, FR-10)
+            </h3>
+            <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748b' }}>
+              Run inference with your ingested model on test dataset data to measure prediction accuracy, precision, recall, F1 score, or regression residuals.
+            </p>
+
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+                gap: '16px',
+                alignItems: 'end',
+              }}
+            >
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Select Ingested Model
+                </label>
+                <select
+                  value={selectedModelId}
+                  onChange={(e) => setSelectedModelId(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '9px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                    backgroundColor: '#ffffff',
+                  }}
+                >
+                  {ingestedModels.length === 0 ? (
+                    <option value="">No models ingested yet (upload one above)</option>
+                  ) : (
+                    ingestedModels.map((m) => (
+                      <option key={m.model_id} value={m.model_id}>
+                        {m.filename} ({m.file_format}) - {m.task_type}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </div>
+
+              <div>
+                <label
+                  style={{
+                    display: 'block',
+                    fontSize: '13px',
+                    fontWeight: 600,
+                    color: '#334155',
+                    marginBottom: '6px',
+                  }}
+                >
+                  Test Dataset ID
+                </label>
+                <input
+                  type="text"
+                  value={testDatasetId}
+                  onChange={(e) => setTestDatasetId(e.target.value)}
+                  placeholder="e.g. dataset-001"
+                  style={{
+                    width: '100%',
+                    padding: '8px 12px',
+                    borderRadius: '6px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '13px',
+                  }}
+                />
+              </div>
+
+              <div>
+                <button
+                  type="button"
+                  onClick={handleEvaluateIngestedModel}
+                  disabled={evaluatingIngested || !selectedModelId}
+                  style={{
+                    width: '100%',
+                    padding: '10px 20px',
+                    borderRadius: '6px',
+                    border: 'none',
+                    backgroundColor: selectedModelId ? '#2563eb' : '#94a3b8',
+                    color: '#ffffff',
+                    fontWeight: 600,
+                    fontSize: '14px',
+                    cursor: selectedModelId ? 'pointer' : 'not-allowed',
+                  }}
+                >
+                  {evaluatingIngested ? 'Evaluating Model...' : 'Run Test Evaluation'}
+                </button>
+              </div>
+            </div>
+
+            {/* Evaluation Results Display */}
+            {ingestedEvalResult && (
+              <div style={{ marginTop: '24px', paddingTop: '20px', borderTop: '1px solid #e2e8f0' }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: '16px',
+                    flexWrap: 'wrap',
+                    gap: '8px',
+                  }}
+                >
+                  <div>
+                    <h4 style={{ margin: 0, color: '#0f172a', fontSize: '16px' }}>
+                      Evaluation Complete: {ingestedEvalResult.algorithm}
+                    </h4>
+                    <span style={{ fontSize: '13px', color: '#64748b' }}>
+                      Evaluated on {ingestedEvalResult.test_samples} test samples in{' '}
+                      {ingestedEvalResult.train_time_ms} ms
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('comparison')}
+                    style={{
+                      padding: '6px 14px',
+                      backgroundColor: '#eff6ff',
+                      color: '#1d4ed8',
+                      border: '1px solid #bfdbfe',
+                      borderRadius: '6px',
+                      fontSize: '13px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    View on Leaderboard →
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+                    gap: '12px',
+                  }}
+                >
+                  {ingestedEvalResult.metrics.Classification && (
+                    <>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F0FDF4',
+                          borderRadius: '8px',
+                          border: '1px solid #BBF7D0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>ACCURACY</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#15803d',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {(ingestedEvalResult.metrics.Classification.accuracy * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>PRECISION</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#0f172a',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Classification.precision.toFixed(4)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>RECALL</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#0f172a',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Classification.recall.toFixed(4)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>F1 SCORE</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#0f172a',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Classification.f1_score.toFixed(4)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  {ingestedEvalResult.metrics.Regression && (
+                    <>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F0FDF4',
+                          borderRadius: '8px',
+                          border: '1px solid #BBF7D0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#166534', fontWeight: 600 }}>R² SCORE</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#15803d',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Regression.r2_score.toFixed(4)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>MAE</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#0f172a',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Regression.mean_absolute_error.toFixed(4)}
+                        </div>
+                      </div>
+                      <div
+                        style={{
+                          padding: '14px',
+                          backgroundColor: '#F8FAFC',
+                          borderRadius: '8px',
+                          border: '1px solid #E2E8F0',
+                        }}
+                      >
+                        <div style={{ fontSize: '12px', color: '#475569', fontWeight: 600 }}>RMSE</div>
+                        <div
+                          style={{
+                            fontSize: '24px',
+                            fontWeight: 'bold',
+                            color: '#0f172a',
+                            marginTop: '4px',
+                          }}
+                        >
+                          {ingestedEvalResult.metrics.Regression.root_mean_squared_error.toFixed(4)}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+          </section>
         </div>
       )}
     </div>

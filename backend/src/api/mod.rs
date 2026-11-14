@@ -85,6 +85,12 @@ pub fn create_router(state: AppState) -> Router {
             get(models::get_supported_algorithms),
         )
         .route("/api/v1/models/execute", post(models::execute_model))
+        .route("/api/v1/models/upload", post(models::upload_model))
+        .route("/api/v1/models/ingested", get(models::list_ingested_models))
+        .route(
+            "/api/v1/models/evaluate-ingested",
+            post(models::evaluate_ingested_model),
+        )
         .route("/api/v1/models/compare", post(comparison::compare_models))
         .route(
             "/api/v1/models/comparison/:session_id",
