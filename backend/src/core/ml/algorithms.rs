@@ -591,6 +591,113 @@ fn internal<E: std::fmt::Debug>(e: E) -> MlError {
     MlError::TrainingFailed(format!("{e:?}"))
 }
 
+/// Stratified train/test split that preserves class proportions.
+pub fn split_stratified<T: Clone>(
+    items: &[T],
+    labels: &[String],
+    train_n: usize,
+) -> Result<(Vec<T>, Vec<T>), MlError> {
+    use std::collections::BTreeMap;
+
+    if items.len() != labels.len() {
+        return Err(MlError::InvalidInput(
+            "Features and labels have different lengths.".into(),
+        ));
+    }
+
+    let n = items.len();
+    let test_n = n.saturating_sub(train_n);
+
+    if train_n == 0 || test_n == 0 || train_n > n {
+        return Err(MlError::InvalidInput(
+            "Invalid train/test split size.".into(),
+        ));
+    }
+
+    let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+
+    for (i, label) in labels.iter().enumerate() {
+        groups.entry(label.clone()).or_default().push(i);
+    }
+
+    let class_count = groups.len();
+
+    if groups.values().any(|indices| indices.len() < 2)
+        || test_n < class_count
+        || train_n < class_count
+    {
+        return Err(MlError::InvalidInput(
+            "Each class needs at least two samples, and both splits must accommodate every class."
+                .into(),
+        ));
+    }
+
+    let mut allocations: Vec<(Vec<usize>, usize, f64)> = groups
+        .into_values()
+        .map(|indices| {
+            let ideal = indices.len() as f64 * test_n as f64 / n as f64;
+            let count = (ideal.floor() as usize).clamp(1, indices.len() - 1);
+            (indices, count, ideal.fract())
+        })
+        .collect();
+
+    let mut allocated: usize = allocations.iter().map(|(_, count, _)| count).sum();
+
+    while allocated < test_n {
+        let best = allocations
+            .iter()
+            .enumerate()
+            .filter(|(_, (indices, count, _))| *count < indices.len() - 1)
+            .max_by(|(_, a), (_, b)| a.2.total_cmp(&b.2))
+            .map(|(i, _)| i);
+
+        let i = best.ok_or_else(|| {
+            MlError::InvalidInput("Unable to allocate stratified test samples.".into())
+        })?;
+
+        allocations[i].1 += 1;
+        allocations[i].2 = 0.0;
+        allocated += 1;
+    }
+
+    while allocated > test_n {
+        let best = allocations
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, count, _))| *count > 1)
+            .min_by(|(_, a), (_, b)| a.2.total_cmp(&b.2))
+            .map(|(i, _)| i);
+
+        let i = best.ok_or_else(|| {
+            MlError::InvalidInput("Unable to adjust stratified test samples.".into())
+        })?;
+
+        allocations[i].1 -= 1;
+        allocations[i].2 = 1.0;
+        allocated -= 1;
+    }
+
+    let mut train_indices = Vec::new();
+    let mut test_indices = Vec::new();
+
+    for (indices, test_count, _) in allocations {
+        let (train, test) = split_shuffled(&indices, indices.len() - test_count);
+
+        train_indices.extend(train);
+        test_indices.extend(test);
+    }
+
+    let (train_indices, _) = split_shuffled(&train_indices, train_indices.len());
+
+    let (test_indices, _) = split_shuffled(&test_indices, test_indices.len());
+
+    let train = train_indices.iter().map(|&i| items[i].clone()).collect();
+
+    let test = test_indices.iter().map(|&i| items[i].clone()).collect();
+
+    Ok((train, test))
+}
+
 /// Classification Algorithm Dispatcher (FR-8, Issue #6)
 ///
 /// Fits the chosen classifier on the training rows and returns one predicted label per
@@ -1176,10 +1283,7 @@ mod supervised_tests {
             parse_classifier("Neural Network (MLP)"),
             Ok(ClassifierAlgo::NeuralNetwork)
         );
-        assert_eq!(
-            parse_classifier("CNN"),
-            Ok(ClassifierAlgo::Cnn)
-        );
+        assert_eq!(parse_classifier("CNN"), Ok(ClassifierAlgo::Cnn));
         assert_eq!(
             parse_regressor("Linear Regression"),
             Ok(RegressorAlgo::LinearRegression)
