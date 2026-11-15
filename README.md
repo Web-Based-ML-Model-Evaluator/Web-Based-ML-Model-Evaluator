@@ -60,7 +60,7 @@ The system replaces fragmented multi-service skeletons with a **zero-latency uni
 | **FR-4** | Task Selection | Automatic routing between **Classification**, **Regression**, and **Clustering** with dynamic algorithm compatibility matrices. |
 | **FR-5** | Features & Targets | Multi-feature selection with automated target validation; prevents selecting target column inside feature sets. |
 | **FR-6** | Clustering Hyperparams | Dynamic cluster configuration ($k \ge 2$) with deterministic K-Means++ seeding and maximum iteration controls. |
-| **FR-7** | Train/Test Split | Strict boundary enforcement ($5\%$ to $50\%$ test split; default $20\%$) with repeatable pseudorandom shuffle (`split_shuffled`). |
+| **FR-7** | Train/Test Split | Strict boundary enforcement (5% to 50% test split; default 20%) with deterministic splitting. Classification uses stratified splitting to preserve class proportions, while regression and clustering use repeatable pseudorandom shuffling (`split_shuffled`). |
 | **FR-8** | Model Dispatching | Execution dispatcher covering linear, ensemble, nearest neighbors, multi-layer perceptron (MLP), and 1D CNN models. |
 | **FR-9** | Classification Metrics | Accuracy, Precision (Macro), Recall (Macro), F1 Score, and an interactive $N \times N$ Confusion Matrix heatmap with raw count / percentage toggles. |
 | **FR-10** | Regression Metrics | Mean Absolute Error (MAE), Mean Squared Error (MSE), Root Mean Squared Error (RMSE), and Coefficient of Determination ($R^2$ Score). |
