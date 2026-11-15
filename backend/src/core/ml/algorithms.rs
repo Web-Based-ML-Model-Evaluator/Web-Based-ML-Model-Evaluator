@@ -1575,5 +1575,24 @@ mod supervised_tests {
             assert!(test.iter().any(|i| labels[*i] == class));
         }
     }
+    #[test]
+    fn stratified_split_rejects_invalid_split_sizes() {
+        let items = vec![1, 2, 3, 4];
 
+        let labels = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &labels, 0).is_err());
+        assert!(split_stratified(&items, &labels, 4).is_err());
+        assert!(split_stratified(&items, &labels, 5).is_err());
+
+        let empty: Vec<usize> = vec![];
+        let empty_labels: Vec<String> = vec![];
+
+        assert!(split_stratified(&empty, &empty_labels, 0).is_err());
+    }
 }
