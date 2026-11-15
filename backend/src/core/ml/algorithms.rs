@@ -1544,4 +1544,36 @@ mod supervised_tests {
 
         assert!(split_stratified(&items, &valid_labels, 0).is_err());
     }
+
+    #[test]
+    fn stratified_split_preserves_all_samples_without_overlap() {
+        let items: Vec<usize> = (0..20).collect();
+
+        let labels: Vec<String> = (0..20)
+            .map(|i| {
+                if i < 10 { "A" } else { "B" }.to_string()
+            })
+            .collect();
+
+        let (train, test) =
+            split_stratified(&items, &labels, 14).unwrap();
+
+        assert_eq!(train.len() + test.len(), items.len());
+
+        for item in &train {
+            assert!(!test.contains(item));
+        }
+
+        let mut combined = train.clone();
+        combined.extend(test.clone());
+        combined.sort();
+
+        assert_eq!(combined, items);
+
+        for class in ["A", "B"] {
+            assert!(train.iter().any(|i| labels[*i] == class));
+            assert!(test.iter().any(|i| labels[*i] == class));
+        }
+    }
+
 }
