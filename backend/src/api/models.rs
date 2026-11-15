@@ -1,9 +1,9 @@
+use crate::core::ml::algorithms::{
+    project_pca_2d, run_kmeans, split_shuffled, split_stratified, try_run_classification_model,
+    try_run_regression_model,
+};
 use crate::core::ml::metrics::{
     compute_classification_metrics, compute_clustering_metrics, compute_regression_metrics,
-};
-use crate::core::ml::algorithms::{
-    project_pca_2d, run_kmeans, split_shuffled, try_run_classification_model,
-    try_run_regression_model,
 };
 use crate::models::{
     ExecutionRequest, ExecutionResponse, IngestedModelEvaluationRequest, IngestedModelMetadata,
@@ -142,8 +142,26 @@ pub fn execute_model_internal(
                 .collect();
 
             // Train / test split using deterministic shuffle
-            let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
-            let (y_train, y_test) = split_shuffled(&labels, train_samples);
+            let (x_train, x_test) = match split_stratified(&feature_matrix, &labels, train_samples)
+            {
+                Ok(split) => split,
+                Err(err) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        StandardErrorResponse::new("SPLIT_FAILED", &err.message(), None),
+                    ));
+                }
+            };
+
+            let (y_train, y_test) = match split_stratified(&labels, &labels, train_samples) {
+                Ok(split) => split,
+                Err(err) => {
+                    return Err((
+                        StatusCode::BAD_REQUEST,
+                        StandardErrorResponse::new("SPLIT_FAILED", &err.message(), None),
+                    ));
+                }
+            };
 
             let predictions =
                 match try_run_classification_model(&req.algorithm, &x_train, &y_train, &x_test) {
@@ -151,11 +169,7 @@ pub fn execute_model_internal(
                     Err(err) => {
                         return Err((
                             StatusCode::BAD_REQUEST,
-                            StandardErrorResponse::new(
-                                "TRAINING_FAILED",
-                                &err.message(),
-                                None,
-                            ),
+                            StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None),
                         ));
                     }
                 };
@@ -205,11 +219,7 @@ pub fn execute_model_internal(
                     Err(err) => {
                         return Err((
                             StatusCode::BAD_REQUEST,
-                            StandardErrorResponse::new(
-                                "TRAINING_FAILED",
-                                &err.message(),
-                                None,
-                            ),
+                            StandardErrorResponse::new("TRAINING_FAILED", &err.message(), None),
                         ));
                     }
                 };
@@ -371,18 +381,35 @@ pub async fn upload_model(
     };
 
     let lower_filename = filename.to_lowercase();
-    let (file_format, default_arch) = if lower_filename.ends_with(".pt") || lower_filename.ends_with(".pth") {
-        ("PyTorch (.pt)", "PyTorch Neural Network (TorchScript / JIT)")
+    let (file_format, default_arch) = if lower_filename.ends_with(".pt")
+        || lower_filename.ends_with(".pth")
+    {
+        (
+            "PyTorch (.pt)",
+            "PyTorch Neural Network (TorchScript / JIT)",
+        )
     } else if lower_filename.ends_with(".joblib") {
-        ("Joblib (.joblib)", "Scikit-Learn Pipeline (Joblib Serialization)")
+        (
+            "Joblib (.joblib)",
+            "Scikit-Learn Pipeline (Joblib Serialization)",
+        )
     } else if lower_filename.ends_with(".pkl") || lower_filename.ends_with(".pickle") {
         ("Pickle (.pkl)", "Python Pickle Serialized Estimator")
     } else if lower_filename.ends_with(".h5") || lower_filename.ends_with(".hdf5") {
-        ("HDF5/Keras (.h5)", "Keras / TensorFlow HDF5 Deep Learning Model")
+        (
+            "HDF5/Keras (.h5)",
+            "Keras / TensorFlow HDF5 Deep Learning Model",
+        )
     } else if lower_filename.ends_with(".onnx") {
-        ("ONNX (.onnx)", "Open Neural Network Exchange (ONNX) Runtime Graph")
+        (
+            "ONNX (.onnx)",
+            "Open Neural Network Exchange (ONNX) Runtime Graph",
+        )
     } else if lower_filename.ends_with(".json") {
-        ("JSON Model (.json)", "Configured Weight Specification (JSON)")
+        (
+            "JSON Model (.json)",
+            "Configured Weight Specification (JSON)",
+        )
     } else {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -426,7 +453,9 @@ pub async fn upload_model(
 }
 
 /// GET /api/v1/models/ingested
-pub async fn list_ingested_models(State(state): State<AppState>) -> Json<Vec<IngestedModelMetadata>> {
+pub async fn list_ingested_models(
+    State(state): State<AppState>,
+) -> Json<Vec<IngestedModelMetadata>> {
     let models = if let Ok(lock) = state.ingested_models.read() {
         lock.values().cloned().collect()
     } else {
@@ -447,7 +476,11 @@ pub async fn evaluate_ingested_model(
         let lock = state.ingested_models.read().map_err(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                Json(StandardErrorResponse::new("LOCK_ERROR", "Internal state lock poisoned.", None)),
+                Json(StandardErrorResponse::new(
+                    "LOCK_ERROR",
+                    "Internal state lock poisoned.",
+                    None,
+                )),
             )
         })?;
         match lock.get(&req.model_id) {
@@ -457,7 +490,10 @@ pub async fn evaluate_ingested_model(
                     StatusCode::NOT_FOUND,
                     Json(StandardErrorResponse::new(
                         "MODEL_NOT_FOUND",
-                        &format!("Ingested model '{}' was not found in active session.", req.model_id),
+                        &format!(
+                            "Ingested model '{}' was not found in active session.",
+                            req.model_id
+                        ),
                         None,
                     )),
                 ));
@@ -468,12 +504,15 @@ pub async fn evaluate_ingested_model(
     // 2. Fetch test dataset records
     let records: Vec<serde_json::Value> = {
         let cleaned_lock = state.cleaned_datasets.read().ok();
-        let from_cleaned = cleaned_lock.as_ref().and_then(|c| c.get(&req.dataset_id)).map(|c| {
-            c.records
-                .iter()
-                .map(|rec| serde_json::to_value(rec).unwrap_or_default())
-                .collect::<Vec<_>>()
-        });
+        let from_cleaned = cleaned_lock
+            .as_ref()
+            .and_then(|c| c.get(&req.dataset_id))
+            .map(|c| {
+                c.records
+                    .iter()
+                    .map(|rec| serde_json::to_value(rec).unwrap_or_default())
+                    .collect::<Vec<_>>()
+            });
 
         if let Some(r) = from_cleaned {
             r
@@ -509,7 +548,10 @@ pub async fn evaluate_ingested_model(
             } else if map.contains_key("target") {
                 "target".to_string()
             } else {
-                map.keys().last().cloned().unwrap_or_else(|| "target".to_string())
+                map.keys()
+                    .last()
+                    .cloned()
+                    .unwrap_or_else(|| "target".to_string())
             }
         } else {
             "target".to_string()
@@ -520,10 +562,7 @@ pub async fn evaluate_ingested_model(
         req.feature_columns
     } else {
         if let Some(serde_json::Value::Object(map)) = records.first() {
-            map.keys()
-                .filter(|&k| k != &target_col)
-                .cloned()
-                .collect()
+            map.keys().filter(|&k| k != &target_col).cloned().collect()
         } else {
             vec![]
         }
@@ -537,23 +576,34 @@ pub async fn evaluate_ingested_model(
         if let serde_json::Value::Object(map) = rec {
             let mut row = Vec::with_capacity(feature_cols.len());
             for col in &feature_cols {
-                let v = map.get(col).and_then(|val| {
-                    if let Some(num) = val.as_f64() {
-                        Some(num)
-                    } else if let Some(txt) = val.as_str() {
-                        txt.parse::<f64>().ok()
-                    } else {
-                        None
-                    }
-                }).unwrap_or(0.0);
+                let v = map
+                    .get(col)
+                    .and_then(|val| {
+                        if let Some(num) = val.as_f64() {
+                            Some(num)
+                        } else if let Some(txt) = val.as_str() {
+                            txt.parse::<f64>().ok()
+                        } else {
+                            None
+                        }
+                    })
+                    .unwrap_or(0.0);
                 row.push(v);
             }
             feature_matrix.push(row);
 
             if let Some(t_val) = map.get(&target_col) {
-                ground_truth_labels.push(t_val.as_str().map(|s| s.to_string()).unwrap_or_else(|| t_val.to_string()));
+                ground_truth_labels.push(
+                    t_val
+                        .as_str()
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| t_val.to_string()),
+                );
                 ground_truth_values.push(t_val.as_f64().unwrap_or_else(|| {
-                    t_val.as_str().and_then(|s| s.parse::<f64>().ok()).unwrap_or(0.0)
+                    t_val
+                        .as_str()
+                        .and_then(|s| s.parse::<f64>().ok())
+                        .unwrap_or(0.0)
                 }));
             } else {
                 ground_truth_labels.push("unknown".to_string());
@@ -567,14 +617,22 @@ pub async fn evaluate_ingested_model(
     let is_regression = model_meta.task_type.to_lowercase() == "regression";
 
     let (metrics_result, mut comp_entry) = if is_regression {
-        let pred_values: Vec<f64> = feature_matrix.iter().enumerate().map(|(i, row)| {
-            let sum: f64 = row.iter().enumerate().map(|(j, &v)| v * ((j + 1) as f64 * 0.4)).sum();
-            if !ground_truth_values.is_empty() {
-                0.85 * ground_truth_values[i % ground_truth_values.len()] + 0.15 * sum
-            } else {
-                sum
-            }
-        }).collect();
+        let pred_values: Vec<f64> = feature_matrix
+            .iter()
+            .enumerate()
+            .map(|(i, row)| {
+                let sum: f64 = row
+                    .iter()
+                    .enumerate()
+                    .map(|(j, &v)| v * ((j + 1) as f64 * 0.4))
+                    .sum();
+                if !ground_truth_values.is_empty() {
+                    0.85 * ground_truth_values[i % ground_truth_values.len()] + 0.15 * sum
+                } else {
+                    sum
+                }
+            })
+            .collect();
 
         let reg_metrics = compute_regression_metrics(&ground_truth_values, &pred_values);
         let mut summary_map = HashMap::new();
@@ -587,7 +645,10 @@ pub async fn evaluate_ingested_model(
             execution_id: execution_id.clone(),
             dataset_id: req.dataset_id.clone(),
             task_type: "Regression".to_string(),
-            algorithm: format!("Ingested: {} ({})", model_meta.filename, model_meta.file_format),
+            algorithm: format!(
+                "Ingested: {} ({})",
+                model_meta.filename, model_meta.file_format
+            ),
             executed_at: Utc::now(),
             train_time_ms: 0.0,
             primary_metric_name: "R2 Score".to_string(),
@@ -603,13 +664,17 @@ pub async fn evaluate_ingested_model(
             known_classes = vec!["class_0".to_string(), "class_1".to_string()];
         }
 
-        let pred_labels: Vec<String> = ground_truth_labels.iter().enumerate().map(|(i, truth)| {
-            if i % 8 == 0 && known_classes.len() > 1 {
-                known_classes[(i + 1) % known_classes.len()].clone()
-            } else {
-                truth.clone()
-            }
-        }).collect();
+        let pred_labels: Vec<String> = ground_truth_labels
+            .iter()
+            .enumerate()
+            .map(|(i, truth)| {
+                if i % 8 == 0 && known_classes.len() > 1 {
+                    known_classes[(i + 1) % known_classes.len()].clone()
+                } else {
+                    truth.clone()
+                }
+            })
+            .collect();
 
         let class_metrics = compute_classification_metrics(&ground_truth_labels, &pred_labels);
         let mut summary_map = HashMap::new();
@@ -622,7 +687,10 @@ pub async fn evaluate_ingested_model(
             execution_id: execution_id.clone(),
             dataset_id: req.dataset_id.clone(),
             task_type: "Classification".to_string(),
-            algorithm: format!("Ingested: {} ({})", model_meta.filename, model_meta.file_format),
+            algorithm: format!(
+                "Ingested: {} ({})",
+                model_meta.filename, model_meta.file_format
+            ),
             executed_at: Utc::now(),
             train_time_ms: 0.0,
             primary_metric_name: "Accuracy".to_string(),
@@ -641,7 +709,10 @@ pub async fn evaluate_ingested_model(
         execution_id,
         dataset_id: req.dataset_id,
         task_type: model_meta.task_type,
-        algorithm: format!("Ingested: {} ({})", model_meta.filename, model_meta.file_format),
+        algorithm: format!(
+            "Ingested: {} ({})",
+            model_meta.filename, model_meta.file_format
+        ),
         train_time_ms: comp_entry.train_time_ms,
         train_samples: 0,
         test_samples,

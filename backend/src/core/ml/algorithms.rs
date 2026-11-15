@@ -591,6 +591,113 @@ fn internal<E: std::fmt::Debug>(e: E) -> MlError {
     MlError::TrainingFailed(format!("{e:?}"))
 }
 
+/// Stratified train/test split that preserves class proportions.
+pub fn split_stratified<T: Clone>(
+    items: &[T],
+    labels: &[String],
+    train_n: usize,
+) -> Result<(Vec<T>, Vec<T>), MlError> {
+    use std::collections::BTreeMap;
+
+    if items.len() != labels.len() {
+        return Err(MlError::InvalidInput(
+            "Features and labels have different lengths.".into(),
+        ));
+    }
+
+    let n = items.len();
+    let test_n = n.saturating_sub(train_n);
+
+    if train_n == 0 || test_n == 0 || train_n > n {
+        return Err(MlError::InvalidInput(
+            "Invalid train/test split size.".into(),
+        ));
+    }
+
+    let mut groups: BTreeMap<String, Vec<usize>> = BTreeMap::new();
+
+    for (i, label) in labels.iter().enumerate() {
+        groups.entry(label.clone()).or_default().push(i);
+    }
+
+    let class_count = groups.len();
+
+    if groups.values().any(|indices| indices.len() < 2)
+        || test_n < class_count
+        || train_n < class_count
+    {
+        return Err(MlError::InvalidInput(
+            "Each class needs at least two samples, and both splits must accommodate every class."
+                .into(),
+        ));
+    }
+
+    let mut allocations: Vec<(Vec<usize>, usize, f64)> = groups
+        .into_values()
+        .map(|indices| {
+            let ideal = indices.len() as f64 * test_n as f64 / n as f64;
+            let count = (ideal.floor() as usize).clamp(1, indices.len() - 1);
+            (indices, count, ideal.fract())
+        })
+        .collect();
+
+    let mut allocated: usize = allocations.iter().map(|(_, count, _)| count).sum();
+
+    while allocated < test_n {
+        let best = allocations
+            .iter()
+            .enumerate()
+            .filter(|(_, (indices, count, _))| *count < indices.len() - 1)
+            .max_by(|(_, a), (_, b)| a.2.total_cmp(&b.2))
+            .map(|(i, _)| i);
+
+        let i = best.ok_or_else(|| {
+            MlError::InvalidInput("Unable to allocate stratified test samples.".into())
+        })?;
+
+        allocations[i].1 += 1;
+        allocations[i].2 = 0.0;
+        allocated += 1;
+    }
+
+    while allocated > test_n {
+        let best = allocations
+            .iter()
+            .enumerate()
+            .filter(|(_, (_, count, _))| *count > 1)
+            .min_by(|(_, a), (_, b)| a.2.total_cmp(&b.2))
+            .map(|(i, _)| i);
+
+        let i = best.ok_or_else(|| {
+            MlError::InvalidInput("Unable to adjust stratified test samples.".into())
+        })?;
+
+        allocations[i].1 -= 1;
+        allocations[i].2 = 1.0;
+        allocated -= 1;
+    }
+
+    let mut train_indices = Vec::new();
+    let mut test_indices = Vec::new();
+
+    for (indices, test_count, _) in allocations {
+        let (train, test) = split_shuffled(&indices, indices.len() - test_count);
+
+        train_indices.extend(train);
+        test_indices.extend(test);
+    }
+
+    let (train_indices, _) = split_shuffled(&train_indices, train_indices.len());
+
+    let (test_indices, _) = split_shuffled(&test_indices, test_indices.len());
+
+    let train = train_indices.iter().map(|&i| items[i].clone()).collect();
+
+    let test = test_indices.iter().map(|&i| items[i].clone()).collect();
+
+    Ok((train, test))
+}
+
 /// Classification Algorithm Dispatcher (FR-8, Issue #6)
 ///
 /// Fits the chosen classifier on the training rows and returns one predicted label per
@@ -1176,10 +1283,7 @@ mod supervised_tests {
             parse_classifier("Neural Network (MLP)"),
             Ok(ClassifierAlgo::NeuralNetwork)
         );
-        assert_eq!(
-            parse_classifier("CNN"),
-            Ok(ClassifierAlgo::Cnn)
-        );
+        assert_eq!(parse_classifier("CNN"), Ok(ClassifierAlgo::Cnn));
         assert_eq!(
             parse_regressor("Linear Regression"),
             Ok(RegressorAlgo::LinearRegression)
@@ -1372,5 +1476,123 @@ mod supervised_tests {
         assert_eq!(split_shuffled(&idx, 15), (tr_a, te_a));
         // it really shuffles (a sorted-by-class file must not give a class-only test set)
         assert_ne!(split_shuffled(&idx, 15).1, vec![0, 1, 2, 3, 4]);
+    }
+
+    #[test]
+    fn stratified_split_preserves_class_distribution() {
+        let labels: Vec<String> = (0..80)
+            .map(|i| if i < 40 { "A" } else { "B" }.to_string())
+            .collect();
+
+        let (train, test) = split_stratified(&labels, &labels, 60).unwrap();
+
+        assert_eq!(train.len(), 60);
+        assert_eq!(test.len(), 20);
+
+        assert_eq!(test.iter().filter(|x| *x == "A").count(), 10);
+        assert_eq!(test.iter().filter(|x| *x == "B").count(), 10);
+    }
+
+    #[test]
+    fn stratified_split_is_deterministic_and_aligned() {
+        let features: Vec<usize> = (0..100).collect();
+
+        let labels: Vec<String> = (0..100)
+            .map(|i| if i < 70 { "A" } else { "B" }.to_string())
+            .collect();
+
+        let first = split_stratified(&features, &labels, 80).unwrap();
+        let second = split_stratified(&features, &labels, 80).unwrap();
+
+        assert_eq!(first, second);
+
+        let (x_train, x_test) = first;
+
+        let (y_train, y_test) = split_stratified(&labels, &labels, 80).unwrap();
+
+        for (index, label) in x_train.iter().zip(&y_train) {
+            assert_eq!(&labels[*index], label);
+        }
+
+        for (index, label) in x_test.iter().zip(&y_test) {
+            assert_eq!(&labels[*index], label);
+        }
+    }
+
+    #[test]
+    fn stratified_split_rejects_invalid_inputs() {
+        let items = vec![1, 2, 3, 4];
+        let labels = vec!["A".to_string(), "A".to_string()];
+
+        assert!(split_stratified(&items, &labels, 2).is_err());
+
+        let rare_class = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &rare_class, 2).is_err());
+
+        let valid_labels = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &valid_labels, 0).is_err());
+    }
+
+    #[test]
+    fn stratified_split_preserves_all_samples_without_overlap() {
+        let items: Vec<usize> = (0..20).collect();
+
+        let labels: Vec<String> = (0..20)
+            .map(|i| {
+                if i < 10 { "A" } else { "B" }.to_string()
+            })
+            .collect();
+
+        let (train, test) =
+            split_stratified(&items, &labels, 14).unwrap();
+
+        assert_eq!(train.len() + test.len(), items.len());
+
+        for item in &train {
+            assert!(!test.contains(item));
+        }
+
+        let mut combined = train.clone();
+        combined.extend(test.clone());
+        combined.sort();
+
+        assert_eq!(combined, items);
+
+        for class in ["A", "B"] {
+            assert!(train.iter().any(|i| labels[*i] == class));
+            assert!(test.iter().any(|i| labels[*i] == class));
+        }
+    }
+    #[test]
+    fn stratified_split_rejects_invalid_split_sizes() {
+        let items = vec![1, 2, 3, 4];
+
+        let labels = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &labels, 0).is_err());
+        assert!(split_stratified(&items, &labels, 4).is_err());
+        assert!(split_stratified(&items, &labels, 5).is_err());
+
+        let empty: Vec<usize> = vec![];
+        let empty_labels: Vec<String> = vec![];
+
+        assert!(split_stratified(&empty, &empty_labels, 0).is_err());
     }
 }
