@@ -1477,4 +1477,71 @@ mod supervised_tests {
         // it really shuffles (a sorted-by-class file must not give a class-only test set)
         assert_ne!(split_shuffled(&idx, 15).1, vec![0, 1, 2, 3, 4]);
     }
+
+    #[test]
+    fn stratified_split_preserves_class_distribution() {
+        let labels: Vec<String> = (0..80)
+            .map(|i| if i < 40 { "A" } else { "B" }.to_string())
+            .collect();
+
+        let (train, test) = split_stratified(&labels, &labels, 60).unwrap();
+
+        assert_eq!(train.len(), 60);
+        assert_eq!(test.len(), 20);
+
+        assert_eq!(test.iter().filter(|x| *x == "A").count(), 10);
+        assert_eq!(test.iter().filter(|x| *x == "B").count(), 10);
+    }
+
+    #[test]
+    fn stratified_split_is_deterministic_and_aligned() {
+        let features: Vec<usize> = (0..100).collect();
+
+        let labels: Vec<String> = (0..100)
+            .map(|i| if i < 70 { "A" } else { "B" }.to_string())
+            .collect();
+
+        let first = split_stratified(&features, &labels, 80).unwrap();
+        let second = split_stratified(&features, &labels, 80).unwrap();
+
+        assert_eq!(first, second);
+
+        let (x_train, x_test) = first;
+
+        let (y_train, y_test) = split_stratified(&labels, &labels, 80).unwrap();
+
+        for (index, label) in x_train.iter().zip(&y_train) {
+            assert_eq!(&labels[*index], label);
+        }
+
+        for (index, label) in x_test.iter().zip(&y_test) {
+            assert_eq!(&labels[*index], label);
+        }
+    }
+
+    #[test]
+    fn stratified_split_rejects_invalid_inputs() {
+        let items = vec![1, 2, 3, 4];
+        let labels = vec!["A".to_string(), "A".to_string()];
+
+        assert!(split_stratified(&items, &labels, 2).is_err());
+
+        let rare_class = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &rare_class, 2).is_err());
+
+        let valid_labels = vec![
+            "A".to_string(),
+            "A".to_string(),
+            "B".to_string(),
+            "B".to_string(),
+        ];
+
+        assert!(split_stratified(&items, &valid_labels, 0).is_err());
+    }
 }
