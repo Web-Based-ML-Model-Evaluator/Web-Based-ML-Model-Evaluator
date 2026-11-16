@@ -86,7 +86,12 @@ pub struct DenseLayer {
 }
 
 impl DenseLayer {
-    pub fn new(in_features: usize, out_features: usize, activation: Activation, rng: &mut Rng) -> Self {
+    pub fn new(
+        in_features: usize,
+        out_features: usize,
+        activation: Activation,
+        rng: &mut Rng,
+    ) -> Self {
         // Xavier/He initialization
         let limit = (6.0 / (in_features + out_features) as f64).sqrt();
         let mut weights = Vec::with_capacity(out_features);
@@ -203,14 +208,16 @@ impl MlpNetwork {
 
                         for in_idx in 0..self.layers[l].in_features {
                             prev_delta[in_idx] += self.layers[l].weights[out_idx][in_idx] * d;
-                            self.layers[l].weights[out_idx][in_idx] -= learning_rate * d * in_act[in_idx];
+                            self.layers[l].weights[out_idx][in_idx] -=
+                                learning_rate * d * in_act[in_idx];
                         }
                     }
 
                     if l > 0 {
                         let pre_acts = &layer_pre_acts[l - 1];
                         for in_idx in 0..self.layers[l].in_features {
-                            prev_delta[in_idx] *= self.layers[l - 1].activation.derivative(pre_acts[in_idx]);
+                            prev_delta[in_idx] *=
+                                self.layers[l - 1].activation.derivative(pre_acts[in_idx]);
                         }
                         delta = prev_delta;
                     }
@@ -259,14 +266,16 @@ impl MlpNetwork {
 
                         for in_idx in 0..self.layers[l].in_features {
                             prev_delta[in_idx] += self.layers[l].weights[out_idx][in_idx] * d;
-                            self.layers[l].weights[out_idx][in_idx] -= learning_rate * d * in_act[in_idx];
+                            self.layers[l].weights[out_idx][in_idx] -=
+                                learning_rate * d * in_act[in_idx];
                         }
                     }
 
                     if l > 0 {
                         let pre_acts = &layer_pre_acts[l - 1];
                         for in_idx in 0..self.layers[l].in_features {
-                            prev_delta[in_idx] *= self.layers[l - 1].activation.derivative(pre_acts[in_idx]);
+                            prev_delta[in_idx] *=
+                                self.layers[l - 1].activation.derivative(pre_acts[in_idx]);
                         }
                         delta = prev_delta;
                     }
@@ -353,7 +362,11 @@ impl CnnModel {
     pub fn new(num_features: usize, out_dim: usize, seed: u64) -> Self {
         let mut rng = Rng::new(seed);
         let num_filters = 8;
-        let kernel_size = if num_features >= 3 { 3 } else { num_features.max(1) };
+        let kernel_size = if num_features >= 3 {
+            3
+        } else {
+            num_features.max(1)
+        };
         let conv = Conv1dLayer::new(1, num_filters, kernel_size, &mut rng);
         // After global average pooling, output dimension is num_filters
         let dense1 = DenseLayer::new(num_filters, 16, Activation::ReLU, &mut rng);

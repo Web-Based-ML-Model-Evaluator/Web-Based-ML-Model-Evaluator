@@ -22,14 +22,19 @@ impl StandardErrorResponse {
             error: ErrorDetail {
                 code: code.to_string(),
                 message: message.to_string(),
-                module: "web_ml_backend".to_string(),
+                module: "ml_engine".to_string(),
                 details,
                 timestamp: Utc::now(),
             },
         }
     }
 
-    pub fn with_module(code: &str, message: &str, module: &str, details: Option<serde_json::Value>) -> Self {
+    pub fn with_module(
+        code: &str,
+        message: &str,
+        module: &str,
+        details: Option<serde_json::Value>,
+    ) -> Self {
         Self {
             error: ErrorDetail {
                 code: code.to_string(),
@@ -41,4 +46,3 @@ impl StandardErrorResponse {
         }
     }
 }
-

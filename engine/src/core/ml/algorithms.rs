@@ -1550,13 +1550,10 @@ mod supervised_tests {
         let items: Vec<usize> = (0..20).collect();
 
         let labels: Vec<String> = (0..20)
-            .map(|i| {
-                if i < 10 { "A" } else { "B" }.to_string()
-            })
+            .map(|i| if i < 10 { "A" } else { "B" }.to_string())
             .collect();
 
-        let (train, test) =
-            split_stratified(&items, &labels, 14).unwrap();
+        let (train, test) = split_stratified(&items, &labels, 14).unwrap();
 
         assert_eq!(train.len() + test.len(), items.len());
 

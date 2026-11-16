@@ -187,7 +187,7 @@ mod tests {
 
     #[test]
     fn test_neural_network_mlp_and_cnn_execution() {
-        use web_ml_backend::core::ml::algorithms::{try_run_classification_model, try_run_regression_model};
+        use ml_engine::core::ml::algorithms::{try_run_classification_model, try_run_regression_model};
 
         let x_train = vec![
             vec![1.0, 2.0],

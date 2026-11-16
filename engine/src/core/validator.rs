@@ -240,4 +240,3 @@ mod tests {
         assert!(e.error.message.contains('b'));
     }
 }
-
