@@ -154,8 +154,9 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     };
 
     setDispatching(true);
-    setValidationMessage('Validating configuration with backend (:8002)...');
+    setValidationMessage('Validating configuration...');
 
+    // Only move on to training when the configuration is confirmed valid.
     try {
       const response = await fetch(`${apiBaseUrl}/api/v1/config/validate`, {
         method: 'POST',
@@ -171,22 +172,22 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
         }),
       });
 
-      if (response.ok) {
-        setIsSuccess(true);
-        setValidationMessage('Configuration validated successfully with Portion 2 service.');
-      } else {
-        const errJson = await response.json().catch(() => null);
-        const errMsg = errJson?.error?.message || `Validation returned HTTP ${response.status}`;
-        setValidationMessage(`Backend notice: ${errMsg} (Proceeding with validated client config)`);
-        setIsSuccess(true);
+      const body = await response.json().catch(() => null);
+      if (!response.ok) {
+        setValidationMessage(body?.error?.message || `Validation failed (HTTP ${response.status}).`);
+        return;
       }
-    } catch {
-      // In standalone / offline mock mode
+      if (body && body.is_valid === false) {
+        setValidationMessage((body.errors as string[] | undefined)?.join(' ') || 'The configuration is not valid.');
+        return;
+      }
       setIsSuccess(true);
-      setValidationMessage('Configuration validated successfully (Offline Mock Mode).');
+      setValidationMessage('Configuration is valid. Training the model...');
+      onConfigurationComplete?.(config);
+    } catch {
+      setValidationMessage('Could not reach the evaluation engine, so the configuration was not validated.');
     } finally {
       setDispatching(false);
-      onConfigurationComplete?.(config);
     }
   };
 

@@ -9,7 +9,7 @@ export interface SimpleEvaluateModelViewProps {
 }
 
 export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = ({
-  datasetId = 'dataset-001',
+  datasetId = '',
   onNavigateHome,
   onViewLeaderboard,
 }) => {
@@ -22,16 +22,10 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
   // Input 2: Test Dataset state
   const [testFile, setTestFile] = useState<File | null>(null);
   const [activeTestDatasetId, setActiveTestDatasetId] = useState<string>(datasetId);
-  const [targetColumn, setTargetColumn] = useState<string>('species');
-  const [availableColumns, setAvailableColumns] = useState<string[]>([
-    'sepal_length',
-    'sepal_width',
-    'petal_length',
-    'petal_width',
-    'species',
-  ]);
+  // Filled from the test CSV the user uploads; there is no built-in sample data
+  const [targetColumn, setTargetColumn] = useState<string>('');
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [isUploadingDataset, setIsUploadingDataset] = useState(false);
-  const [useSampleData, setUseSampleData] = useState(true);
 
   // Evaluation & Results State
   const [isEvaluating, setIsEvaluating] = useState(false);
@@ -74,7 +68,6 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
     const file = e.target.files?.[0];
     if (!file) return;
     setTestFile(file);
-    setUseSampleData(false);
     setIsUploadingDataset(true);
     setErrorMessage(null);
 
@@ -99,15 +92,13 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
     setErrorMessage(null);
 
     try {
-      // If student hasn't uploaded a custom model, auto-create a mock/reference model so evaluation always works
-      let modelIdToUse = uploadedModel?.model_id;
+      // Both inputs are required: results only ever come from the user's own model and data
+      const modelIdToUse = uploadedModel?.model_id;
       if (!modelIdToUse) {
-        const dummyFile = new File(['mock_weights_binary_data'], 'reference_model.pt', {
-          type: 'application/octet-stream',
-        });
-        const autoModel = await ApiClient.uploadModel(dummyFile, taskType, 'Reference Ingested Model');
-        setUploadedModel(autoModel);
-        modelIdToUse = autoModel.model_id;
+        throw new Error('Upload your trained model file first.');
+      }
+      if (!activeTestDatasetId || !targetColumn) {
+        throw new Error('Upload a test CSV and choose its target column first.');
       }
 
       const res = await ApiClient.evaluateIngestedModel(
@@ -418,44 +409,6 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
             </span>
           </label>
 
-          {/* Preset Sample Data toggle */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '10px 14px',
-              backgroundColor: useSampleData ? '#FAF0E8' : '#F6F3EE',
-              borderRadius: '8px',
-              marginBottom: '16px',
-              fontSize: '12px',
-            }}
-          >
-            <span style={{ color: '#4A3E34', fontWeight: 500 }}>
-              {useSampleData ? 'Using standard built-in Iris test dataset' : `Using uploaded test dataset (${testFile?.name})`}
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setUseSampleData(true);
-                setTestFile(null);
-                setActiveTestDatasetId('dataset-001');
-                setTargetColumn('species');
-              }}
-              style={{
-                border: 'none',
-                backgroundColor: 'transparent',
-                color: '#D45A1E',
-                fontSize: '12px',
-                fontWeight: 600,
-                cursor: 'pointer',
-                textDecoration: 'underline',
-              }}
-            >
-              Reset to Sample
-            </button>
-          </div>
-
           {/* Target Column Selector */}
           <div style={{ marginTop: 'auto' }}>
             <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, color: '#4A3E34', marginBottom: '8px' }}>
@@ -478,6 +431,11 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
                 color: '#221C18',
               }}
             >
+              {availableColumns.length === 0 && (
+                <option value="" disabled>
+                  Upload a test CSV first
+                </option>
+              )}
               {availableColumns.map((col) => (
                 <option key={col} value={col}>
                   {col}

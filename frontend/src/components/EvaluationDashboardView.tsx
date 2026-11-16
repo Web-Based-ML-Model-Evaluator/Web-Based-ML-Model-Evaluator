@@ -77,213 +77,92 @@ export interface PcaClusteringData {
 export interface EvaluationDashboardProps {
   datasetId?: string;
   apiBaseUrl?: string;
-  regressionMetrics?: RegressionMetrics;
-  confusionMatrix?: ConfusionMatrixData;
-  pcaClustering?: PcaClusteringData;
+  /** Configuration from Step 2. When present, the model is trained on mount. */
+  taskConfig?: any;
+  initialTab?: 'results' | 'comparison' | 'ingest';
 }
 
-export const DEFAULT_CONFUSION_MATRIX: ConfusionMatrixData = {
-  labels: ['Class 0 (Setosa)', 'Class 1 (Versicolor)', 'Class 2 (Virginica)'],
-  matrix: [
-    [50, 0, 0],
-    [0, 47, 3],
-    [0, 2, 48],
-  ],
-  metrics: {
-    accuracy: 0.967,
-    precision: 0.967,
-    recall: 0.967,
-    f1_score: 0.967,
-  },
-};
+/** Turns the engine's execution response into the shapes the result panels draw. */
+function describeExecution(result: any): {
+  regression?: RegressionMetrics;
+  confusion?: ConfusionMatrixData;
+  clustering?: PcaClusteringData;
+} {
+  const m = result?.metrics;
+  if (!m) return {};
+  if (Array.isArray(m.confusion_matrix)) {
+    return {
+      confusion: {
+        labels: m.class_labels ?? [],
+        matrix: m.confusion_matrix,
+        metrics: {
+          accuracy: m.accuracy,
+          precision: m.precision,
+          recall: m.recall,
+          f1_score: m.f1_score,
+        },
+      },
+    };
+  }
+  if (typeof m.r2_score === 'number') {
+    return {
+      regression: {
+        mean_absolute_error: m.mean_absolute_error,
+        mean_squared_error: m.mean_squared_error,
+        root_mean_squared_error: m.root_mean_squared_error,
+        r2_score: m.r2_score,
+      },
+    };
+  }
+  if (Array.isArray(m.pca_scatter_data)) {
+    return {
+      clustering: {
+        points: m.pca_scatter_data.map((p: any) => ({
+          id: p.sample_id,
+          pc1: p.x,
+          pc2: p.y,
+          cluster: p.cluster,
+          label: `Sample #${p.sample_id + 1}`,
+        })),
+        silhouette_score: m.silhouette_score,
+        davies_bouldin_index: m.davies_bouldin_index,
+        cluster_count: m.num_clusters,
+      },
+    };
+  }
+  return {};
+}
 
-export const DEFAULT_PCA_POINTS: PcaPoint[] = [
-  // Cluster 0 (Setosa)
-  { id: 1, pc1: -2.68, pc2: 0.32, cluster: 0, label: 'Sample #1' },
-  { id: 2, pc1: -2.71, pc2: -0.18, cluster: 0, label: 'Sample #2' },
-  { id: 3, pc1: -2.88, pc2: -0.14, cluster: 0, label: 'Sample #3' },
-  { id: 4, pc1: -2.75, pc2: -0.32, cluster: 0, label: 'Sample #4' },
-  { id: 5, pc1: -2.73, pc2: 0.33, cluster: 0, label: 'Sample #5' },
-  { id: 6, pc1: -2.28, pc2: 0.74, cluster: 0, label: 'Sample #6' },
-  { id: 7, pc1: -2.82, pc2: -0.09, cluster: 0, label: 'Sample #7' },
-  { id: 8, pc1: -2.63, pc2: 0.17, cluster: 0, label: 'Sample #8' },
-  // Cluster 1 (Versicolor)
-  { id: 9, pc1: 0.57, pc2: -0.63, cluster: 1, label: 'Sample #9' },
-  { id: 10, pc1: 0.48, pc2: -0.72, cluster: 1, label: 'Sample #10' },
-  { id: 11, pc1: 0.61, pc2: -0.54, cluster: 1, label: 'Sample #11' },
-  { id: 12, pc1: 0.31, pc2: -0.79, cluster: 1, label: 'Sample #12' },
-  { id: 13, pc1: 0.45, pc2: -0.62, cluster: 1, label: 'Sample #13' },
-  { id: 14, pc1: 0.72, pc2: -0.41, cluster: 1, label: 'Sample #14' },
-  { id: 15, pc1: 0.28, pc2: -0.83, cluster: 1, label: 'Sample #15' },
-  { id: 16, pc1: 0.52, pc2: -0.58, cluster: 1, label: 'Sample #16' },
-  // Cluster 2 (Virginica)
-  { id: 17, pc1: 1.86, pc2: 0.52, cluster: 2, label: 'Sample #17' },
-  { id: 18, pc1: 2.12, pc2: 0.64, cluster: 2, label: 'Sample #18' },
-  { id: 19, pc1: 2.04, pc2: 0.46, cluster: 2, label: 'Sample #19' },
-  { id: 20, pc1: 1.95, pc2: 0.73, cluster: 2, label: 'Sample #20' },
-  { id: 21, pc1: 2.31, pc2: 0.81, cluster: 2, label: 'Sample #21' },
-  { id: 22, pc1: 1.77, pc2: 0.39, cluster: 2, label: 'Sample #22' },
-  { id: 23, pc1: 2.15, pc2: 0.58, cluster: 2, label: 'Sample #23' },
-  { id: 24, pc1: 2.22, pc2: 0.69, cluster: 2, label: 'Sample #24' },
-];
-
-export const DEFAULT_PCA_CLUSTERING: PcaClusteringData = {
-  points: DEFAULT_PCA_POINTS,
-  silhouette_score: 0.725,
-  davies_bouldin_index: 0.65,
-  cluster_count: 3,
-};
-
-// Built-in Mock Datasets for complete offline developer isolation & testing (FR-12)
-const MOCK_COMPARISON_RUNS: ModelComparisonEntry[] = [
-  {
-    execution_id: 'exec-rf-01',
-    dataset_id: 'dataset-001',
-    task_type: 'Classification',
-    algorithm: 'Random Forest Classifier',
-    executed_at: new Date(Date.now() - 3600000).toISOString(),
-    train_time_ms: 38.4,
-    primary_metric_name: 'Accuracy',
-    primary_metric_value: 0.95,
-    summary_metrics: {
-      accuracy: 0.95,
-      precision: 0.94,
-      recall: 0.95,
-      f1_score: 0.945,
-    },
-  },
-  {
-    execution_id: 'exec-knn-02',
-    dataset_id: 'dataset-001',
-    task_type: 'Classification',
-    algorithm: 'K-Nearest Neighbors (KNN)',
-    executed_at: new Date(Date.now() - 2700000).toISOString(),
-    train_time_ms: 18.2,
-    primary_metric_name: 'Accuracy',
-    primary_metric_value: 0.91,
-    summary_metrics: {
-      accuracy: 0.91,
-      precision: 0.9,
-      recall: 0.91,
-      f1_score: 0.905,
-    },
-  },
-  {
-    execution_id: 'exec-lr-03',
-    dataset_id: 'dataset-001',
-    task_type: 'Classification',
-    algorithm: 'Logistic Regression',
-    executed_at: new Date(Date.now() - 1800000).toISOString(),
-    train_time_ms: 12.1,
-    primary_metric_name: 'Accuracy',
-    primary_metric_value: 0.88,
-    summary_metrics: {
-      accuracy: 0.88,
-      precision: 0.87,
-      recall: 0.88,
-      f1_score: 0.875,
-    },
-  },
-  {
-    execution_id: 'exec-dt-04',
-    dataset_id: 'dataset-001',
-    task_type: 'Classification',
-    algorithm: 'Decision Tree Classifier',
-    executed_at: new Date(Date.now() - 900000).toISOString(),
-    train_time_ms: 9.5,
-    primary_metric_name: 'Accuracy',
-    primary_metric_value: 0.86,
-    summary_metrics: {
-      accuracy: 0.86,
-      precision: 0.85,
-      recall: 0.86,
-      f1_score: 0.855,
-    },
-  },
-  {
-    execution_id: 'exec-reg-rf-05',
-    dataset_id: 'dataset-001',
-    task_type: 'Regression',
-    algorithm: 'Random Forest Regressor',
-    executed_at: new Date(Date.now() - 7200000).toISOString(),
-    train_time_ms: 42.0,
-    primary_metric_name: 'R2 Score',
-    primary_metric_value: 0.892,
-    summary_metrics: {
-      r2: 0.892,
-      mae: 2.14,
-      mse: 8.65,
-      rmse: 2.94,
-    },
-  },
-  {
-    execution_id: 'exec-reg-dt-06',
-    dataset_id: 'dataset-001',
-    task_type: 'Regression',
-    algorithm: 'Decision Tree Regressor',
-    executed_at: new Date(Date.now() - 6300000).toISOString(),
-    train_time_ms: 8.3,
-    primary_metric_name: 'R2 Score',
-    primary_metric_value: 0.81,
-    summary_metrics: {
-      r2: 0.81,
-      mae: 3.2,
-      mse: 15.2,
-      rmse: 3.9,
-    },
-  },
-  {
-    execution_id: 'exec-reg-lin-07',
-    dataset_id: 'dataset-001',
-    task_type: 'Regression',
-    algorithm: 'Linear Regression',
-    executed_at: new Date(Date.now() - 5400000).toISOString(),
-    train_time_ms: 6.1,
-    primary_metric_name: 'R2 Score',
-    primary_metric_value: 0.765,
-    summary_metrics: {
-      r2: 0.765,
-      mae: 4.1,
-      mse: 18.8,
-      rmse: 4.34,
-    },
-  },
-  {
-    execution_id: 'exec-clust-km-08',
-    dataset_id: 'dataset-001',
-    task_type: 'Clustering',
-    algorithm: 'K-Means Clustering',
-    executed_at: new Date(Date.now() - 8100000).toISOString(),
-    train_time_ms: 15.0,
-    primary_metric_name: 'Silhouette Score',
-    primary_metric_value: 0.725,
-    summary_metrics: {
-      silhouette: 0.725,
-      davies_bouldin: 0.65,
-    },
-  },
-];
+const formatMetric = (value: number | undefined) =>
+  typeof value === 'number' && Number.isFinite(value) ? value.toFixed(4) : '--';
 
 export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
-  datasetId = 'dataset-001',
+  datasetId = '',
   apiBaseUrl = 'http://localhost:8080',
-  regressionMetrics,
-  confusionMatrix = DEFAULT_CONFUSION_MATRIX,
-  pcaClustering = DEFAULT_PCA_CLUSTERING,
+  taskConfig,
+  initialTab = 'results',
 }) => {
-  const [activeTab, setActiveTab] = useState<'results' | 'comparison' | 'ingest'>('results');
+  const [activeTab, setActiveTab] = useState<'results' | 'comparison' | 'ingest'>(initialTab);
+
+  // Result of really training the model configured in Step 2 (FR-8 to FR-11)
+  const [executionResult, setExecutionResult] = useState<any | null>(null);
+  const [training, setTraining] = useState<boolean>(false);
+  const [trainError, setTrainError] = useState<string | null>(null);
+  const {
+    regression: regressionMetrics,
+    confusion: confusionMatrix,
+    clustering: pcaClustering,
+  } = useMemo(() => describeExecution(executionResult), [executionResult]);
+  // Comparison history is per dataset; "all" lists every run in the session
+  const historyKey = datasetId || 'all';
   const [showPercentages, setShowPercentages] = useState<boolean>(false);
   const [hoveredPoint, setHoveredPoint] = useState<PcaPoint | null>(null);
   const [selectedClusterFilter, setSelectedClusterFilter] = useState<number | 'all'>('all');
 
   // FR-12 Model Comparison Dashboard State
-  const [offlineMockMode, setOfflineMockMode] = useState<boolean>(true);
-  const [comparisonRuns, setComparisonRuns] = useState<ModelComparisonEntry[]>(MOCK_COMPARISON_RUNS);
-  const [selectedExecutionIds, setSelectedExecutionIds] = useState<string[]>([
-    'exec-rf-01',
-    'exec-knn-02',
-    'exec-lr-03',
-  ]);
+  // Only runs that were really executed in this session are listed
+  const [comparisonRuns, setComparisonRuns] = useState<ModelComparisonEntry[]>([]);
+  const [selectedExecutionIds, setSelectedExecutionIds] = useState<string[]>([]);
   const [comparisonReport, setComparisonReport] = useState<ComparisonReport | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
@@ -354,112 +233,66 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     }
   };
 
-  // Fetch comparison runs from backend or fallback to mock fixtures (FR-12)
+  // Fetch the runs executed in this session (FR-12). An empty list stays empty.
   const fetchComparisonRuns = useCallback(async () => {
     setLoading(true);
     setError(null);
-    if (offlineMockMode) {
-      setComparisonRuns(MOCK_COMPARISON_RUNS);
-      setLoading(false);
-      return;
-    }
-
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/models/comparison/${datasetId}`);
+      const response = await fetch(`${apiBaseUrl}/api/v1/models/comparison/${encodeURIComponent(historyKey)}`);
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: Failed to fetch comparison history from server.`);
+        throw new Error(`HTTP ${response.status}`);
       }
       const data = await response.json();
-      const runs = (data.runs as ModelComparisonEntry[]) || [];
-      if (runs.length === 0) {
-        // Fallback to mock runs if backend has empty session history
-        setComparisonRuns(MOCK_COMPARISON_RUNS);
-      } else {
-        setComparisonRuns(runs);
-      }
+      setComparisonRuns((data.runs as ModelComparisonEntry[]) || []);
     } catch (err: any) {
-      setError(`Backend error (${err.message}). Showing offline fixtures.`);
-      setComparisonRuns(MOCK_COMPARISON_RUNS);
+      setError(`Could not load the model history (${err.message}).`);
+      setComparisonRuns([]);
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl, datasetId, offlineMockMode]);
+  }, [apiBaseUrl, historyKey]);
 
   useEffect(() => {
     fetchComparisonRuns();
   }, [fetchComparisonRuns]);
+
+  // Train the model configured in Step 2 (FR-8). Results come only from this run.
+  useEffect(() => {
+    if (!taskConfig) return;
+    let cancelled = false;
+    setTraining(true);
+    setTrainError(null);
+    setExecutionResult(null);
+    ApiClient.dispatchPipeline({
+      dataset_id: taskConfig.dataset_id,
+      task_type: taskConfig.task_type,
+      algorithm: taskConfig.algorithm,
+      target_column: taskConfig.target_column,
+      feature_columns: taskConfig.feature_columns,
+      test_split_ratio: taskConfig.test_split_ratio,
+      num_clusters: taskConfig.num_clusters,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setExecutionResult(res.execution_result);
+        fetchComparisonRuns();
+      })
+      .catch((err: any) => {
+        if (!cancelled) setTrainError(err.message);
+      })
+      .finally(() => {
+        if (!cancelled) setTraining(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [taskConfig, fetchComparisonRuns]);
 
   // Filtered runs based on current task selection
   const filteredRuns = useMemo(() => {
     if (taskFilter === 'All') return comparisonRuns;
     return comparisonRuns.filter((r) => r.task_type.toLowerCase() === taskFilter.toLowerCase());
   }, [comparisonRuns, taskFilter]);
-
-  // Compute local comparison report when in offline mode or as fast client-side fallback
-  const computeLocalComparisonReport = useCallback(
-    (models: ModelComparisonEntry[]): ComparisonReport => {
-      const task = models[0].task_type;
-      const sorted = [...models].sort((a, b) => {
-        // Primary metric higher is better
-        if (b.primary_metric_value !== a.primary_metric_value) {
-          return b.primary_metric_value - a.primary_metric_value;
-        }
-        // Tie-breaker: lower training latency
-        return a.train_time_ms - b.train_time_ms;
-      });
-
-      const ranking: ModelRankEntry[] = sorted.map((m, index) => ({
-        rank: index + 1,
-        execution_id: m.execution_id,
-        algorithm: m.algorithm,
-        primary_metric_name: m.primary_metric_name,
-        primary_metric_value: m.primary_metric_value,
-        train_time_ms: m.train_time_ms,
-      }));
-
-      const best = sorted[0];
-      const recommendationReason =
-        `${best.algorithm} is identified as the optimal model, achieving the highest ` +
-        `${best.primary_metric_name} (${best.primary_metric_value.toFixed(3)}) with training latency of ` +
-        `${best.train_time_ms.toFixed(1)} ms.`;
-
-      const metrics_table: Record<string, Record<string, number>> = {};
-      // Primary metric row
-      metrics_table[best.primary_metric_name] = {};
-      models.forEach((m) => {
-        metrics_table[best.primary_metric_name][m.execution_id] = m.primary_metric_value;
-      });
-
-      // Latency row
-      metrics_table['Training Latency (ms)'] = {};
-      models.forEach((m) => {
-        metrics_table['Training Latency (ms)'][m.execution_id] = m.train_time_ms;
-      });
-
-      // Summary metrics rows
-      models.forEach((m) => {
-        Object.entries(m.summary_metrics).forEach(([k, v]) => {
-          const displayKey = k.replace(/_/g, ' ').toUpperCase();
-          if (!metrics_table[displayKey]) {
-            metrics_table[displayKey] = {};
-          }
-          metrics_table[displayKey][m.execution_id] = v;
-        });
-      });
-
-      return {
-        dataset_id: datasetId,
-        task_type: task,
-        compared_models: models,
-        best_model_id: best.execution_id,
-        best_model_algorithm: best.algorithm,
-        recommendation_reason: recommendationReason,
-        metrics_table,
-        ranking,
-      };
-    },
-    [datasetId]
-  );
 
   // Perform model comparison (FR-12 / BR-7)
   const handleCompareModels = useCallback(async () => {
@@ -486,12 +319,6 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       return;
     }
 
-    if (offlineMockMode) {
-      const localReport = computeLocalComparisonReport(selectedModels);
-      setComparisonReport(localReport);
-      return;
-    }
-
     setLoading(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/v1/models/compare`, {
@@ -508,13 +335,12 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       const report: ComparisonReport = await response.json();
       setComparisonReport(report);
     } catch (err: any) {
-      console.warn('Backend compare endpoint unavailable, falling back to local calculation:', err.message);
-      const localReport = computeLocalComparisonReport(selectedModels);
-      setComparisonReport(localReport);
+      setError(`Comparison failed: ${err.message}`);
+      setComparisonReport(null);
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl, comparisonRuns, computeLocalComparisonReport, offlineMockMode, selectedExecutionIds]);
+  }, [apiBaseUrl, comparisonRuns, selectedExecutionIds]);
 
   // Automatically trigger comparison on initial tab switch or selection change if >=2 models selected
   useEffect(() => {
@@ -556,45 +382,6 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
             <p style={{ margin: '4px 0 0', color: '#73675E', fontSize: '14px' }}>
               Inspect detailed training performance and side-by-side leaderboard rankings.
             </p>
-          </div>
-          {/* Offline / Backend Mode Switch */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              backgroundColor: '#f8fafc',
-              padding: '6px 12px',
-              borderRadius: '6px',
-              border: '1px solid #cbd5e1',
-              fontSize: '13px',
-            }}
-          >
-            <input
-              type="checkbox"
-              id="mock-mode-toggle"
-              checked={offlineMockMode}
-              onChange={(e) => {
-                setOfflineMockMode(e.target.checked);
-                setComparisonReport(null);
-              }}
-              style={{ cursor: 'pointer' }}
-            />
-            <label htmlFor="mock-mode-toggle" style={{ cursor: 'pointer', fontWeight: 600, color: '#334155' }}>
-              Simulation Mode
-            </label>
-            <span
-              style={{
-                fontSize: '11px',
-                padding: '2px 6px',
-                borderRadius: '4px',
-                backgroundColor: offlineMockMode ? '#dcfce7' : '#e0f2fe',
-                color: offlineMockMode ? '#166534' : '#0369a1',
-                fontWeight: 600,
-              }}
-            >
-              {offlineMockMode ? 'STANDALONE' : 'LIVE API'}
-            </span>
           </div>
         </div>
 
@@ -647,7 +434,28 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
 
       {activeTab === 'results' ? (
         <div>
+          {training && (
+            <p style={{ padding: '16px', borderRadius: '8px', backgroundColor: '#eff6ff', color: '#1d4ed8', fontWeight: 600 }}>
+              Training {taskConfig?.algorithm} on your dataset...
+            </p>
+          )}
+          {trainError && (
+            <p role="alert" style={{ padding: '16px', borderRadius: '8px', backgroundColor: '#fef2f2', color: '#991b1b', fontWeight: 600 }}>
+              Training failed: {trainError}
+            </p>
+          )}
+          {!training && !trainError && !executionResult && (
+            <p style={{ padding: '16px', borderRadius: '8px', backgroundColor: '#f8fafc', color: '#475569' }}>
+              No model has been trained yet. Upload a dataset in Step 1 and configure a task in Step 2 to see real results here.
+            </p>
+          )}
+          {executionResult && (
+            <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#475569' }}>
+              <strong>{executionResult.algorithm}</strong> trained on {executionResult.train_samples} rows and tested on {executionResult.test_samples} rows in {executionResult.train_time_ms} ms.
+            </p>
+          )}
           {/* Regression Performance Metrics Display (Issue 8 / FR-10) */}
+          {regressionMetrics && (
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px' }}>
             <h3 style={{ marginTop: 0, display: 'flex', alignItems: 'center' }}>
               Regression Performance Metrics
@@ -669,7 +477,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
-                  {regressionMetrics ? regressionMetrics.mean_absolute_error : '--'}
+                  {formatMetric(regressionMetrics.mean_absolute_error)}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
@@ -681,7 +489,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
-                  {regressionMetrics ? regressionMetrics.mean_squared_error : '--'}
+                  {formatMetric(regressionMetrics.mean_squared_error)}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
@@ -693,7 +501,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', marginTop: '4px' }}>
-                  {regressionMetrics ? regressionMetrics.root_mean_squared_error : '--'}
+                  {formatMetric(regressionMetrics.root_mean_squared_error)}
                 </div>
               </div>
               <div style={{ padding: '16px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
@@ -705,13 +513,15 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '24px', fontWeight: 'bold', color: '#16a34a', marginTop: '4px' }}>
-                  {regressionMetrics ? regressionMetrics.r2_score : '--'}
+                  {formatMetric(regressionMetrics.r2_score)}
                 </div>
               </div>
             </div>
           </section>
+          )}
 
           {/* SECTION 2: Confusion Matrix Grid (FR-9) */}
+          {confusionMatrix && (
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '20px', backgroundColor: '#ffffff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
@@ -755,7 +565,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#15803d', marginTop: '2px' }}>
-                  {((confusionMatrix.metrics?.accuracy ?? 0.967) * 100).toFixed(1)}%
+                  {((confusionMatrix.metrics?.accuracy ?? 0) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe' }}>
@@ -767,7 +577,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#1d4ed8', marginTop: '2px' }}>
-                  {((confusionMatrix.metrics?.precision ?? 0.967) * 100).toFixed(1)}%
+                  {((confusionMatrix.metrics?.precision ?? 0) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#faf5ff', borderRadius: '6px', border: '1px solid #e9d5ff' }}>
@@ -779,7 +589,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#7e22ce', marginTop: '2px' }}>
-                  {((confusionMatrix.metrics?.recall ?? 0.967) * 100).toFixed(1)}%
+                  {((confusionMatrix.metrics?.recall ?? 0) * 100).toFixed(1)}%
                 </div>
               </div>
               <div style={{ padding: '12px', backgroundColor: '#fef3c7', borderRadius: '6px', border: '1px solid #fde68a' }}>
@@ -791,7 +601,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                   />
                 </div>
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#b45309', marginTop: '2px' }}>
-                  {((confusionMatrix.metrics?.f1_score ?? 0.967) * 100).toFixed(1)}%
+                  {((confusionMatrix.metrics?.f1_score ?? 0) * 100).toFixed(1)}%
                 </div>
               </div>
             </div>
@@ -897,8 +707,10 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               </div>
             </div>
           </section>
+          )}
 
           {/* SECTION 3: 2D PCA Cluster Scatter Plot (FR-11) */}
+          {pcaClustering && (
           <section style={{ padding: '20px', border: '1px solid #e2e8f0', borderRadius: '8px', backgroundColor: '#ffffff' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
               <div>
@@ -919,7 +731,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 <div style={{ padding: '6px 12px', backgroundColor: '#f0fdf4', borderRadius: '6px', border: '1px solid #bbf7d0', fontSize: '12px', display: 'flex', alignItems: 'center' }}>
                   <span style={{ color: '#166534', fontWeight: 600 }}>Silhouette Score: </span>
                   <span style={{ fontWeight: 700, color: '#15803d', marginLeft: '4px' }}>
-                    {pcaClustering.silhouette_score ?? 0.725}
+                    {formatMetric(pcaClustering.silhouette_score)}
                   </span>
                   <InfoTooltip
                     title="Silhouette Score"
@@ -929,7 +741,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 <div style={{ padding: '6px 12px', backgroundColor: '#eff6ff', borderRadius: '6px', border: '1px solid #bfdbfe', fontSize: '12px', display: 'flex', alignItems: 'center' }}>
                   <span style={{ color: '#1e40af', fontWeight: 600 }}>Davies-Bouldin: </span>
                   <span style={{ fontWeight: 700, color: '#1d4ed8', marginLeft: '4px' }}>
-                    {pcaClustering.davies_bouldin_index ?? 0.65}
+                    {formatMetric(pcaClustering.davies_bouldin_index)}
                   </span>
                   <InfoTooltip
                     title="Davies-Bouldin Index"
@@ -1206,8 +1018,9 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               )}
             </div>
           </section>
+          )}
         </div>
-      ) : (
+      ) : activeTab === 'comparison' ? (
         /* SECTION 4: Side-by-Side Model Comparison Dashboard (FR-12 / Issue 15) */
         <div>
           {/* Dashboard Control Bar */}
@@ -1741,7 +1554,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
             </div>
           )}
         </div>
-      )}
+      ) : null}
 
       {/* Model Ingestion & Evaluation Tab (Issues #19, #20, #31, #32, #33) */}
       {activeTab === 'ingest' && (

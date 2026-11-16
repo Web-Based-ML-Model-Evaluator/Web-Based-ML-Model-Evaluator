@@ -39,21 +39,10 @@ export const App: React.FC = () => {
 
   // Session & Dataset State
   const [sessionId] = useState<string>(() => `session-${Math.random().toString(36).substring(2, 9)}`);
-  const [activeDatasetId, setActiveDatasetId] = useState<string>('dataset-001');
-  const [availableColumns, setAvailableColumns] = useState<string[]>([
-    'sepal_length',
-    'sepal_width',
-    'petal_length',
-    'petal_width',
-    'species',
-  ]);
-  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({
-    sepal_length: 'Numeric',
-    sepal_width: 'Numeric',
-    petal_length: 'Numeric',
-    petal_width: 'Numeric',
-    species: 'Categorical',
-  });
+  // Empty until the user uploads a dataset in Step 1
+  const [activeDatasetId, setActiveDatasetId] = useState<string>('');
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({});
   const [taskConfig, setTaskConfig] = useState<any>(null);
 
   // Security Purge State (SEC-1, SEC-3)
@@ -368,6 +357,7 @@ export const App: React.FC = () => {
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
                   apiBaseUrl={apiBaseUrl}
+                  taskConfig={taskConfig}
                 />
               )}
 
@@ -375,6 +365,7 @@ export const App: React.FC = () => {
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
                   apiBaseUrl={apiBaseUrl}
+                  initialTab="comparison"
                 />
               )}
             </div>
@@ -449,6 +440,7 @@ export const App: React.FC = () => {
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
                   apiBaseUrl={apiBaseUrl}
+                  initialTab="comparison"
                 />
               )}
             </div>
