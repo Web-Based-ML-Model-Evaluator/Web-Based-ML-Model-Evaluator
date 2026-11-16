@@ -60,17 +60,38 @@ pub fn execute_model_internal(
             }
         }
         _ => {
-            // Check state for cleaned dataset
+            // Check state for cleaned or raw uploaded dataset
             let from_state: Option<Vec<serde_json::Value>> = {
-                if let Ok(cleaned_lock) = state.cleaned_datasets.read() {
-                    cleaned_lock.get(&req.dataset_id).map(|c| {
+                let cleaned_records = state.cleaned_datasets.read().ok().and_then(|lock| {
+                    lock.get(&req.dataset_id).map(|c| {
                         c.records
                             .iter()
                             .map(|rec| serde_json::to_value(rec).unwrap_or_default())
                             .collect()
                     })
+                });
+
+                if cleaned_records.is_some() {
+                    cleaned_records
                 } else {
-                    None
+                    state.raw_datasets.read().ok().and_then(|lock| {
+                        lock.get(&req.dataset_id).map(|raw| {
+                            raw.rows
+                                .iter()
+                                .map(|row| {
+                                    let mut map = serde_json::Map::new();
+                                    for (header, val) in raw.headers.iter().zip(row.iter()) {
+                                        if let Ok(num) = val.parse::<f64>() {
+                                            map.insert(header.clone(), serde_json::json!(num));
+                                        } else {
+                                            map.insert(header.clone(), serde_json::json!(val));
+                                        }
+                                    }
+                                    serde_json::Value::Object(map)
+                                })
+                                .collect()
+                        })
+                    })
                 }
             };
 
@@ -82,13 +103,18 @@ pub fn execute_model_internal(
                     serde_json::json!({"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "species": "setosa"}),
                     serde_json::json!({"sepal_length": 4.9, "sepal_width": 3.0, "petal_length": 1.4, "species": "setosa"}),
                     serde_json::json!({"sepal_length": 4.7, "sepal_width": 3.2, "petal_length": 1.3, "species": "setosa"}),
+                    serde_json::json!({"sepal_length": 4.6, "sepal_width": 3.1, "petal_length": 1.5, "species": "setosa"}),
+                    serde_json::json!({"sepal_length": 5.0, "sepal_width": 3.6, "petal_length": 1.4, "species": "setosa"}),
                     serde_json::json!({"sepal_length": 7.0, "sepal_width": 3.2, "petal_length": 4.7, "species": "versicolor"}),
                     serde_json::json!({"sepal_length": 6.4, "sepal_width": 3.2, "petal_length": 4.5, "species": "versicolor"}),
                     serde_json::json!({"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 4.9, "species": "versicolor"}),
+                    serde_json::json!({"sepal_length": 5.5, "sepal_width": 2.3, "petal_length": 4.0, "species": "versicolor"}),
+                    serde_json::json!({"sepal_length": 6.5, "sepal_width": 2.8, "petal_length": 4.6, "species": "versicolor"}),
                     serde_json::json!({"sepal_length": 6.3, "sepal_width": 3.3, "petal_length": 6.0, "species": "virginica"}),
                     serde_json::json!({"sepal_length": 5.8, "sepal_width": 2.7, "petal_length": 5.1, "species": "virginica"}),
                     serde_json::json!({"sepal_length": 7.1, "sepal_width": 3.0, "petal_length": 5.9, "species": "virginica"}),
                     serde_json::json!({"sepal_length": 7.6, "sepal_width": 3.0, "petal_length": 6.6, "species": "virginica"}),
+                    serde_json::json!({"sepal_length": 7.9, "sepal_width": 3.8, "petal_length": 6.4, "species": "virginica"}),
                 ]
             }
         }
@@ -501,20 +527,37 @@ pub async fn evaluate_ingested_model(
         }
     };
 
-    // 2. Fetch test dataset records
+    // 2. Fetch test dataset records (from cleaned or raw uploaded dataset)
     let records: Vec<serde_json::Value> = {
-        let cleaned_lock = state.cleaned_datasets.read().ok();
-        let from_cleaned = cleaned_lock
-            .as_ref()
-            .and_then(|c| c.get(&req.dataset_id))
-            .map(|c| {
+        let from_cleaned = state.cleaned_datasets.read().ok().and_then(|lock| {
+            lock.get(&req.dataset_id).map(|c| {
                 c.records
                     .iter()
                     .map(|rec| serde_json::to_value(rec).unwrap_or_default())
                     .collect::<Vec<_>>()
-            });
+            })
+        });
 
         if let Some(r) = from_cleaned {
+            r
+        } else if let Some(r) = state.raw_datasets.read().ok().and_then(|lock| {
+            lock.get(&req.dataset_id).map(|raw| {
+                raw.rows
+                    .iter()
+                    .map(|row| {
+                        let mut map = serde_json::Map::new();
+                        for (header, val) in raw.headers.iter().zip(row.iter()) {
+                            if let Ok(num) = val.parse::<f64>() {
+                                map.insert(header.clone(), serde_json::json!(num));
+                            } else {
+                                map.insert(header.clone(), serde_json::json!(val));
+                            }
+                        }
+                        serde_json::Value::Object(map)
+                    })
+                    .collect::<Vec<_>>()
+            })
+        }) {
             r
         } else {
             // Default sample test records if dataset not explicitly loaded

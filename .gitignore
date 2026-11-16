@@ -16,3 +16,11 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Python / Pytest
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.coverage
+htmlcov/

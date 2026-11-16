@@ -397,29 +397,76 @@ Web-Based-ML-Model-Evaluator/
 
 ## 8. Testing & Verification
 
-The project is backed by **111 automated backend tests** and full TypeScript type verification.
+The project is backed by **116 automated Rust backend tests**, a **40-test Python Pytest integration and verification suite**, and full TypeScript static type checking.
 
-### Run All Backend Tests
+### 8.1 Backend Rust Tests
 ```bash
 npm test
 ```
-*Output: All 111 unit and integration tests pass in $<0.15\text{s}$ with zero failures.*
+*Executes all 116 Rust unit and integration tests (in-memory pipeline, ingestion, routing, execution, comparison, metrics, and security sandboxing) in $<0.20\text{s}$ with zero failures.*
 
-### Run Frontend Typecheck
+### 8.2 Pytest Integration & Cross-Validation Suite
+```bash
+npm run test:pytest
+# Or directly via Python:
+python -m pytest tests_py -v
+```
+*Executes 40 end-to-end integration tests verifying:*
+- **Model Training Execution:** All 6 classifiers (Logistic Regression, Decision Tree, Random Forest, KNN, MLP, CNN) and all 5 regressors (Linear Regression, Decision Tree, Random Forest, MLP, CNN).
+- **Stratified Splitting:** Class proportion preservation across train/test splits.
+- **Unsupervised Clustering:** K-Means clustering, silhouette scores, Davies-Bouldin index, and 2D PCA scatter point projections.
+- **Dataset Lifecycle:** CSV multipart upload, file validation, schema type inference, mean/median/mode imputation, deduplication, and session purge.
+- **Model Ingestion & Evaluation:** Student 2-step evaluation workflow across `.pt`, `.joblib`, `.pkl`, `.h5`, and `.onnx` formats.
+- **Side-by-Side Model Comparison:** Comparison store, automated multi-metric ranking, and latency tracking.
+- **Mathematical Cross-Validation:** Independent verification comparing Rust metric computations against NumPy and Scikit-Learn standard formulas.
+
+### 8.3 Run All Suites (Rust + Frontend + Pytest)
+```bash
+npm run test:all
+```
+*Runs Rust backend tests, TypeScript type checking, and Pytest integration tests sequentially.*
+
+### 8.4 Frontend Typecheck & Production Build
 ```bash
 npm run typecheck
-```
-*Output: `tsc --noEmit` completes with 0 errors.*
-
-### Run Production Build
-```bash
 npm run build
 ```
-*Output: Vite transforms, bundles, and minifies client in $<300\text{ms}$ into `dist/`.*
+*Output: `tsc --noEmit` completes with 0 errors, and Vite bundles the production assets in $<300\text{ms}$ into `dist/`.*
 
 ---
 
-## 9. Getting Started & Quick Start
+## 9. CI/CD Pipeline Architecture
+
+The project features a continuous integration and deployment pipeline configured via GitHub Actions:
+
+```
+[Push / Pull Request]
+          │
+          ├──> 1. Unified Rust Backend CI (cargo check, cargo test, clippy, rustfmt)
+          │
+          ├──> 2. Frontend Client CI (Node.js 20, npm ci, tsc --noEmit, vite build)
+          │
+          └──> 3. Pytest E2E Test Suite (Python 3.11, cargo build, pytest tests_py)
+                    │
+                    ▼
+          [4. CI Status Gate] ──> (All 3 checks must pass before PR merge)
+```
+
+- **Continuous Integration (`.github/workflows/ci.yml`):**
+  - **`rust-backend`**: Validates compile integrity, executes all 116 Rust tests, verifies formatting (`rustfmt`), and checks code quality (`clippy`).
+  - **`frontend-check`**: Validates TypeScript types and builds production Vite bundle.
+  - **`pytest-integration`**: Builds backend binary and executes the complete 40-test Pytest integration suite.
+  - **`ci-gate`**: Single status check gate enforcing full pipeline pass before merging.
+- **Continuous Deployment (`.github/workflows/cd.yml`):**
+  - Triggered automatically on merge to `main` or manual `workflow_dispatch`.
+  - Builds optimized release binary (`cargo build --release`).
+  - Executes an automated **production release smoke test** (`/health` probe).
+  - Generates SHA-256 checksums (`SHA256SUMS.txt`).
+  - Packages and uploads production release artifacts (`web-ml-backend-linux`, `web-ml-frontend-dist`, `release-checksums`).
+
+---
+
+## 10. Getting Started & Quick Start
 
 ### Prerequisites
 - [Rust](https://rustup.rs/) (version `1.80+`)
@@ -447,7 +494,7 @@ npm run dev
 
 ---
 
-## 10. Consolidated Documentation
+## 11. Consolidated Documentation
 
 All team design documents, specifications, and architecture diagrams have been consolidated into a single bookmarked PDF:
 - **Location:** [`documents/Team13_Consolidated_Documentation.pdf`](file:///c:/B.Tech/Fifth_sem/SE/ite1/documents/Team13_Consolidated_Documentation.pdf)
