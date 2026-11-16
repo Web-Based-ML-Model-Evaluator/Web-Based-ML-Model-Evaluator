@@ -245,9 +245,10 @@ impl MlpNetwork {
                     layer_inputs.push(current.clone());
                 }
 
-                // MSE loss: output - target
+                // MSE loss: output - target with gradient clipping
                 let pred = current[0];
-                let mut delta = vec![pred - target_val];
+                let error = (pred - target_val).clamp(-5.0, 5.0);
+                let mut delta = vec![error];
 
                 for l in (0..self.layers.len()).rev() {
                     let in_act = &layer_inputs[l];
@@ -488,7 +489,8 @@ impl CnnModel {
                 let (_, out_post) = self.dense_out.forward(&d1_post);
 
                 let pred = out_post[0];
-                let out_delta = vec![pred - target_val];
+                let error = (pred - target_val).clamp(-5.0, 5.0);
+                let out_delta = vec![error];
 
                 let mut d1_delta = vec![0.0; self.dense1.out_features];
                 for o in 0..self.dense_out.out_features {
@@ -563,18 +565,24 @@ pub fn run_mlp_regression(
         return Ok(vec![]);
     }
     let n_features = x_train[0].len();
+    let n_samples = y_train.len() as f64;
+    let y_mean = y_train.iter().sum::<f64>() / n_samples.max(1.0);
+    let y_var = y_train.iter().map(|&v| (v - y_mean).powi(2)).sum::<f64>() / n_samples.max(1.0);
+    let y_std = if y_var.sqrt() > 1e-12 { y_var.sqrt() } else { 1.0 };
+
+    let y_norm: Vec<f64> = y_train.iter().map(|&v| (v - y_mean) / y_std).collect();
 
     let layer_sizes = vec![n_features, 32, 16, 1];
     let activations = vec![Activation::ReLU, Activation::ReLU, Activation::Identity];
     let mut mlp = MlpNetwork::new(&layer_sizes, &activations, 42);
 
-    mlp.train_regression(x_train, y_train, 80, 0.01);
+    mlp.train_regression(x_train, &y_norm, 80, 0.01);
 
     let predictions = x_test
         .iter()
         .map(|sample| {
             let scores = mlp.forward(sample);
-            scores[0]
+            scores[0] * y_std + y_mean
         })
         .collect();
 
@@ -622,15 +630,21 @@ pub fn run_cnn_regression(
         return Ok(vec![]);
     }
     let n_features = x_train[0].len();
+    let n_samples = y_train.len() as f64;
+    let y_mean = y_train.iter().sum::<f64>() / n_samples.max(1.0);
+    let y_var = y_train.iter().map(|&v| (v - y_mean).powi(2)).sum::<f64>() / n_samples.max(1.0);
+    let y_std = if y_var.sqrt() > 1e-12 { y_var.sqrt() } else { 1.0 };
+
+    let y_norm: Vec<f64> = y_train.iter().map(|&v| (v - y_mean) / y_std).collect();
 
     let mut cnn = CnnModel::new(n_features, 1, 42);
-    cnn.train_regression(x_train, y_train, 80, 0.01);
+    cnn.train_regression(x_train, &y_norm, 80, 0.01);
 
     let predictions = x_test
         .iter()
         .map(|sample| {
             let scores = cnn.forward(sample);
-            scores[0]
+            scores[0] * y_std + y_mean
         })
         .collect();
 

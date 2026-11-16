@@ -5,9 +5,13 @@ on:
     branches: [ main ]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-release:
-    name: Build & Package Production Artifacts
+    name: Build, Verify & Package Production Release
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -32,8 +36,28 @@ jobs:
       - name: Build release binary for unified backend
         run: cargo build --release --workspace
 
-      - name: Verify release binary
-        run: ls -la target/release/web_ml_backend*
+      - name: Verify release binary exists
+        run: |
+          ls -la target/release/web_ml_backend*
+          chmod +x target/release/web_ml_backend
+
+      - name: Production Release Smoke Test
+        run: |
+          echo "Starting release binary for smoke test..."
+          PORT=8099 ./target/release/web_ml_backend &
+          PID=$!
+          sleep 2
+          curl -s -f http://127.0.0.1:8099/health || (echo "Smoke test health check failed" && kill -9 $PID && exit 1)
+          kill -15 $PID || true
+          echo "Release binary passed smoke test."
+
+      - name: Generate SHA-256 Checksums
+        run: |
+          mkdir -p release-artifacts
+          cp target/release/web_ml_backend release-artifacts/
+          cd release-artifacts
+          sha256sum web_ml_backend > SHA256SUMS.txt
+          cat SHA256SUMS.txt
 
       - name: Upload Unified Backend release artifact
         uses: actions/upload-artifact@v4
@@ -47,4 +71,11 @@ jobs:
         with:
           name: web-ml-frontend-dist
           path: dist/
+          retention-days: 14
+
+      - name: Upload Release Checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-checksums
+          path: release-artifacts/SHA256SUMS.txt
           retention-days: 14
