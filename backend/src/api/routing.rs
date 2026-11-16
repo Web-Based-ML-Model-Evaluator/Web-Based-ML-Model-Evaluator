@@ -4,11 +4,7 @@ use crate::models::{
     TaskConfiguration, TaskSupportInfo, TaskType, ValidationResult,
 };
 use crate::state::AppState;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::Json,
-};
+use axum::{extract::State, http::StatusCode, response::Json};
 use uuid::Uuid;
 
 /// GET /api/v1/config/tasks (FR-4)
@@ -79,29 +75,12 @@ pub fn get_schema_from_state(
         }
     }
 
-    // Fallback default for mock or demo runs if dataset_id begins with "demo" or "dataset-001"
-    if dataset_id.starts_with("dataset-001") || dataset_id.starts_with("demo") {
-        return Ok((
-            vec![
-                "sepal_length".to_string(),
-                "sepal_width".to_string(),
-                "petal_length".to_string(),
-                "petal_width".to_string(),
-                "species".to_string(),
-            ],
-            std::collections::HashMap::from([
-                ("sepal_length".to_string(), "Numeric".to_string()),
-                ("sepal_width".to_string(), "Numeric".to_string()),
-                ("petal_length".to_string(), "Numeric".to_string()),
-                ("petal_width".to_string(), "Numeric".to_string()),
-                ("species".to_string(), "Categorical".to_string()),
-            ]),
-        ));
-    }
-
     Err(StandardErrorResponse::new(
         "DATASET_NOT_FOUND",
-        &format!("Dataset with ID '{}' was not found in active session.", dataset_id),
+        &format!(
+            "Dataset with ID '{}' was not found in active session.",
+            dataset_id
+        ),
         None,
     ))
 }
@@ -204,4 +183,3 @@ pub async fn dispatch_pipeline(
         execution_result: Some(serde_json::to_value(&exec_response).unwrap_or_default()),
     }))
 }
-

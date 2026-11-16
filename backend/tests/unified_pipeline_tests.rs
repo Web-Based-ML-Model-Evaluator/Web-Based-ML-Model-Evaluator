@@ -21,7 +21,9 @@ fn test_unified_state_in_memory_isolation_and_purge() {
 #[test]
 fn test_hardware_status_probe() {
     let state = AppState::default();
-    assert!(state.hardware_status.logical_cores >= 1);
-    assert!(state.hardware_status.gpu_acceleration_supported);
-    assert_eq!(state.hardware_status.status, "OPERATIONAL_ULTRA_FAST");
+    // Only measured values: cores come from the OS, never an assumed default
+    if let Some(cores) = state.hardware_status.logical_cores {
+        assert!(cores >= 1);
+    }
+    assert!(!state.hardware_status.compute_backend.is_empty());
 }

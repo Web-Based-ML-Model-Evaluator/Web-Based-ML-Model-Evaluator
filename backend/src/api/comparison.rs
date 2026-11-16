@@ -11,17 +11,8 @@ pub async fn get_comparison_dashboard(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
 ) -> Json<serde_json::Value> {
-    let history = state.comparison_store.get_history(&session_id);
-    let runs = if history.is_empty()
-        && (session_id == "all" || session_id == "default" || session_id == "mock")
-    {
-        if session_id == "mock" && state.comparison_store.get_all_runs().is_empty() {
-            state.comparison_store.seed_mock_runs();
-        }
-        state.comparison_store.get_all_runs()
-    } else {
-        history
-    };
+    // Only runs that were really executed in this session ("all" lists every dataset)
+    let runs = state.comparison_store.get_history(&session_id);
 
     Json(serde_json::json!({
         "dataset_id": session_id,
@@ -79,4 +70,3 @@ pub async fn purge_session_models(
         "message": "Model execution runs purged securely from host memory per SEC-1 and SEC-3."
     }))
 }
-

@@ -8,8 +8,9 @@ pub struct IngestedModelMetadata {
     pub file_format: String, // "PyTorch (.pt)", "Joblib (.joblib)", "Pickle (.pkl)", "HDF5/Keras (.h5)", "ONNX (.onnx)", "JSON Schema"
     pub task_type: String,   // "classification" or "regression"
     pub architecture: String,
-    pub input_features: usize,
-    pub output_classes: usize,
+    /// Unknown until the file is actually parsed.
+    pub input_features: Option<usize>,
+    pub output_classes: Option<usize>,
     pub class_labels: Vec<String>,
     pub file_size_bytes: usize,
     pub uploaded_at: DateTime<Utc>,

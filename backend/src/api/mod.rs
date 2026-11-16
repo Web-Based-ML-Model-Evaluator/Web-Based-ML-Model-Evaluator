@@ -20,7 +20,7 @@ pub async fn health_check() -> impl IntoResponse {
         "service": "web_ml_unified_backend",
         "version": "1.0.0",
         "team": "Team 13",
-        "architecture": "High-Performance Unified In-Memory Pipeline (Rust + Axum + Rayon)"
+        "architecture": "Unified in-memory pipeline (Rust + Axum)"
     }))
 }
 
@@ -104,7 +104,6 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/v1/session/purge", post(datasets::purge_all_datasets))
         // Hardware & Acceleration Status
         .route("/api/v1/hardware/status", get(hardware::get_hardware_status))
-        .route("/api/v1/hardware/benchmark", post(hardware::benchmark_hardware))
         .fallback(fallback_404_handler)
         .layer(cors)
         .with_state(state)

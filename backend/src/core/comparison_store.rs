@@ -257,7 +257,8 @@ impl ComparisonStore {
         map.remove(dataset_id).map(|v| v.len()).unwrap_or(0)
     }
 
-    /// Seeds realistic mock runs across all 3 tasks to enable standalone offline exploration
+    /// Test fixture: seeds made-up runs across all 3 tasks. Never call this from a
+    /// request handler; the leaderboard must only show runs that were really executed.
     pub fn seed_mock_runs(&self) {
         let session = "default-session".to_string();
 

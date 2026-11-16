@@ -1,13 +1,14 @@
 use crate::core::ml::algorithms::{
-    project_pca_2d, run_kmeans, split_shuffled, split_stratified, try_run_classification_model,
+    project_pca_2d, split_shuffled, split_stratified, try_run_classification_model, try_run_kmeans,
     try_run_regression_model,
 };
 use crate::core::ml::metrics::{
     compute_classification_metrics, compute_clustering_metrics, compute_regression_metrics,
 };
+use crate::core::preprocessing::clean_and_impute;
 use crate::models::{
     ExecutionRequest, ExecutionResponse, IngestedModelEvaluationRequest, IngestedModelMetadata,
-    MetricResults, ModelComparisonEntry, StandardErrorResponse,
+    MetricResults, ModelComparisonEntry, PreprocessingRequest, StandardErrorResponse,
 };
 use crate::state::AppState;
 use axum::{
@@ -42,6 +43,163 @@ pub async fn get_supported_algorithms() -> impl IntoResponse {
     }))
 }
 
+type ApiError = (StatusCode, StandardErrorResponse);
+
+fn api_error(status: StatusCode, code: &str, message: String) -> ApiError {
+    (status, StandardErrorResponse::new(code, &message, None))
+}
+
+/// Returns the records of a dataset in the session, as JSON objects.
+///
+/// Uses the cleaned data when the dataset was preprocessed. A dataset that was uploaded
+/// but not preprocessed is only usable when it has no missing values (GitHub #23 lets such
+/// datasets skip Step 1's preprocessing). Never substitutes sample data: an unknown id is
+/// a `DATASET_NOT_FOUND` error.
+pub fn load_dataset_records(
+    state: &AppState,
+    dataset_id: &str,
+) -> Result<Vec<serde_json::Value>, ApiError> {
+    let to_values = |records: &[HashMap<String, serde_json::Value>]| -> Vec<serde_json::Value> {
+        records
+            .iter()
+            .map(|rec| serde_json::to_value(rec).unwrap_or_default())
+            .collect()
+    };
+
+    if let Ok(cleaned) = state.cleaned_datasets.read() {
+        if let Some(dto) = cleaned.get(dataset_id) {
+            return Ok(to_values(&dto.records));
+        }
+    }
+
+    let raw = state
+        .raw_datasets
+        .read()
+        .ok()
+        .and_then(|raw| raw.get(dataset_id).cloned());
+    let raw = match raw {
+        Some(r) => r,
+        None => {
+            return Err(api_error(
+                StatusCode::NOT_FOUND,
+                "DATASET_NOT_FOUND",
+                format!(
+                    "Dataset '{}' was not found in this session. Upload it first.",
+                    dataset_id
+                ),
+            ));
+        }
+    };
+
+    // No rules: just type the values (numbers as numbers) without changing any data
+    let no_rules = PreprocessingRequest {
+        imputation_rules: HashMap::new(),
+        drop_duplicates: false,
+        trim_whitespace: true,
+    };
+    let (dto, summary) =
+        clean_and_impute(&raw, &no_rules).map_err(|e| (StatusCode::UNPROCESSABLE_ENTITY, e))?;
+    if summary.missing_values_remaining > 0 {
+        return Err(api_error(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "DATASET_NEEDS_PREPROCESSING",
+            format!(
+                "Dataset '{}' has {} missing value(s). Choose how to handle them in Step 1 (preprocessing) before training.",
+                dataset_id, summary.missing_values_remaining
+            ),
+        ));
+    }
+    Ok(to_values(&dto.records))
+}
+
+/// Reads one cell as a number. Missing columns and non-numeric values are errors,
+/// never silently replaced by 0.
+fn numeric_cell(record: &serde_json::Value, column: &str, row: usize) -> Result<f64, ApiError> {
+    let parsed = match record.get(column) {
+        Some(serde_json::Value::Number(n)) => n.as_f64(),
+        Some(serde_json::Value::String(s)) => s.trim().parse::<f64>().ok(),
+        None => {
+            return Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "UNKNOWN_COLUMN",
+                format!("Column '{}' does not exist in this dataset.", column),
+            ));
+        }
+        _ => None,
+    };
+    parsed.filter(|v| v.is_finite()).ok_or_else(|| {
+        api_error(
+            StatusCode::BAD_REQUEST,
+            "NON_NUMERIC_VALUE",
+            format!(
+                "Column '{}' has a non-numeric or missing value in row {}. Only numeric columns can be used here.",
+                column,
+                row + 1
+            ),
+        )
+    })
+}
+
+/// Builds the feature matrix from the selected columns.
+pub fn build_feature_matrix(
+    records: &[serde_json::Value],
+    feature_columns: &[String],
+) -> Result<Vec<Vec<f64>>, ApiError> {
+    if feature_columns.is_empty() {
+        return Err(api_error(
+            StatusCode::BAD_REQUEST,
+            "NO_FEATURES_SELECTED",
+            "Select at least one feature column.".to_string(),
+        ));
+    }
+    records
+        .iter()
+        .enumerate()
+        .map(|(i, rec)| {
+            feature_columns
+                .iter()
+                .map(|col| numeric_cell(rec, col, i))
+                .collect()
+        })
+        .collect()
+}
+
+/// Reads the target column as class labels (any non-missing value).
+fn label_column(records: &[serde_json::Value], target: &str) -> Result<Vec<String>, ApiError> {
+    records
+        .iter()
+        .enumerate()
+        .map(|(i, rec)| match rec.get(target) {
+            Some(serde_json::Value::String(s)) if !s.trim().is_empty() => Ok(s.clone()),
+            Some(serde_json::Value::Number(n)) => Ok(n.to_string()),
+            Some(serde_json::Value::Bool(b)) => Ok(b.to_string()),
+            None => Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "UNKNOWN_COLUMN",
+                format!("Target column '{}' does not exist in this dataset.", target),
+            )),
+            _ => Err(api_error(
+                StatusCode::BAD_REQUEST,
+                "MISSING_TARGET_VALUE",
+                format!("Target column '{}' is empty in row {}.", target, i + 1),
+            )),
+        })
+        .collect()
+}
+
+fn required_target(req_target: &Option<String>) -> Result<&str, ApiError> {
+    req_target
+        .as_deref()
+        .filter(|t| !t.trim().is_empty())
+        .ok_or_else(|| {
+            api_error(
+                StatusCode::BAD_REQUEST,
+                "MISSING_TARGET_COLUMN",
+                "Select a target column for supervised learning.".to_string(),
+            )
+        })
+}
+
 /// Internal execution helper shared between `/api/v1/models/execute` and `/api/v1/pipeline/dispatch`
 pub fn execute_model_internal(
     state: &AppState,
@@ -49,49 +207,14 @@ pub fn execute_model_internal(
 ) -> Result<ExecutionResponse, (StatusCode, StandardErrorResponse)> {
     let start_time = Instant::now();
 
-    // 1. Extract records from payload or state
+    // 1. Records come from the request body or from this session's dataset store
     let records = match &req.data {
-        Some(serde_json::Value::Array(arr)) if !arr.is_empty() => arr.clone(),
-        Some(serde_json::Value::Object(map)) => {
-            if let Some(serde_json::Value::Array(recs)) = map.get("records") {
-                recs.clone()
-            } else {
-                vec![]
-            }
-        }
-        _ => {
-            // Check state for cleaned dataset
-            let from_state: Option<Vec<serde_json::Value>> = {
-                if let Ok(cleaned_lock) = state.cleaned_datasets.read() {
-                    cleaned_lock.get(&req.dataset_id).map(|c| {
-                        c.records
-                            .iter()
-                            .map(|rec| serde_json::to_value(rec).unwrap_or_default())
-                            .collect()
-                    })
-                } else {
-                    None
-                }
-            };
-
-            if let Some(recs) = from_state {
-                recs
-            } else {
-                // Default high quality sample dataset so UI and tests always work seamlessly
-                vec![
-                    serde_json::json!({"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "species": "setosa"}),
-                    serde_json::json!({"sepal_length": 4.9, "sepal_width": 3.0, "petal_length": 1.4, "species": "setosa"}),
-                    serde_json::json!({"sepal_length": 4.7, "sepal_width": 3.2, "petal_length": 1.3, "species": "setosa"}),
-                    serde_json::json!({"sepal_length": 7.0, "sepal_width": 3.2, "petal_length": 4.7, "species": "versicolor"}),
-                    serde_json::json!({"sepal_length": 6.4, "sepal_width": 3.2, "petal_length": 4.5, "species": "versicolor"}),
-                    serde_json::json!({"sepal_length": 6.9, "sepal_width": 3.1, "petal_length": 4.9, "species": "versicolor"}),
-                    serde_json::json!({"sepal_length": 6.3, "sepal_width": 3.3, "petal_length": 6.0, "species": "virginica"}),
-                    serde_json::json!({"sepal_length": 5.8, "sepal_width": 2.7, "petal_length": 5.1, "species": "virginica"}),
-                    serde_json::json!({"sepal_length": 7.1, "sepal_width": 3.0, "petal_length": 5.9, "species": "virginica"}),
-                    serde_json::json!({"sepal_length": 7.6, "sepal_width": 3.0, "petal_length": 6.6, "species": "virginica"}),
-                ]
-            }
-        }
+        Some(serde_json::Value::Array(arr)) => arr.clone(),
+        Some(serde_json::Value::Object(map)) => match map.get("records") {
+            Some(serde_json::Value::Array(recs)) => recs.clone(),
+            _ => vec![],
+        },
+        _ => load_dataset_records(state, &req.dataset_id)?,
     };
 
     if records.is_empty() {
@@ -106,19 +229,7 @@ pub fn execute_model_internal(
     }
 
     // 2. Extract feature matrix X
-    let mut feature_matrix: Vec<Vec<f64>> = Vec::with_capacity(records.len());
-    for rec in &records {
-        let mut row = Vec::with_capacity(req.feature_columns.len());
-        for f in &req.feature_columns {
-            let val = match rec.get(f) {
-                Some(serde_json::Value::Number(n)) => n.as_f64().unwrap_or(0.0),
-                Some(serde_json::Value::String(s)) => s.parse::<f64>().unwrap_or(0.0),
-                _ => 0.0,
-            };
-            row.push(val);
-        }
-        feature_matrix.push(row);
-    }
+    let feature_matrix = build_feature_matrix(&records, &req.feature_columns)?;
 
     let execution_id = Uuid::new_v4().to_string();
     let total_samples = feature_matrix.len();
@@ -128,18 +239,8 @@ pub fn execute_model_internal(
 
     let (metrics_result, mut comparison_entry) = match req.task_type.to_lowercase().as_str() {
         "classification" => {
-            let target_col = req.target_column.as_deref().unwrap_or("species");
-            let labels: Vec<String> = records
-                .iter()
-                .map(|r| {
-                    r.get(target_col)
-                        .map(|v| match v {
-                            serde_json::Value::String(s) => s.clone(),
-                            _ => v.to_string(),
-                        })
-                        .unwrap_or_else(|| "unknown".to_string())
-                })
-                .collect();
+            let target_col = required_target(&req.target_column)?;
+            let labels = label_column(&records, target_col)?;
 
             // Train / test split using deterministic shuffle
             let (x_train, x_test) = match split_stratified(&feature_matrix, &labels, train_samples)
@@ -196,19 +297,12 @@ pub fn execute_model_internal(
             (MetricResults::Classification(class_metrics), comp_entry)
         }
         "regression" => {
-            let target_col = req.target_column.as_deref().unwrap_or("target");
+            let target_col = required_target(&req.target_column)?;
             let targets: Vec<f64> = records
                 .iter()
-                .map(|r| {
-                    r.get(target_col)
-                        .and_then(|v| match v {
-                            serde_json::Value::Number(n) => n.as_f64(),
-                            serde_json::Value::String(s) => s.parse::<f64>().ok(),
-                            _ => None,
-                        })
-                        .unwrap_or(0.0)
-                })
-                .collect();
+                .enumerate()
+                .map(|(i, r)| numeric_cell(r, target_col, i))
+                .collect::<Result<_, _>>()?;
 
             let (x_train, x_test) = split_shuffled(&feature_matrix, train_samples);
             let (y_train, y_test) = split_shuffled(&targets, train_samples);
@@ -246,8 +340,16 @@ pub fn execute_model_internal(
             (MetricResults::Regression(reg_metrics), comp_entry)
         }
         "clustering" => {
-            let k = req.num_clusters.unwrap_or(3);
-            let assignments = run_kmeans(&feature_matrix, k, 30);
+            let k = req.num_clusters.ok_or_else(|| {
+                api_error(
+                    StatusCode::BAD_REQUEST,
+                    "MISSING_CLUSTER_COUNT",
+                    "Choose the number of clusters (k) for K-Means.".to_string(),
+                )
+            })?;
+            let assignments = try_run_kmeans(&feature_matrix, k, 30).map_err(|err| {
+                api_error(StatusCode::BAD_REQUEST, "TRAINING_FAILED", err.message())
+            })?;
             let pca_points = project_pca_2d(&feature_matrix, &assignments);
             let cluster_metrics =
                 compute_clustering_metrics(&feature_matrix, &assignments, k, pca_points);
@@ -433,16 +535,15 @@ pub async fn upload_model(
         file_format: file_format.to_string(),
         task_type: task_type.clone(),
         architecture,
-        input_features: 4,
-        output_classes: if task_type == "classification" { 3 } else { 1 },
-        class_labels: if task_type == "classification" {
-            vec!["class_0".to_string(), "class_1".to_string(), "class_2".to_string()]
-        } else {
-            vec![]
-        },
+        // The file is stored as-is; it is not parsed, so its shape is unknown.
+        input_features: None,
+        output_classes: None,
+        class_labels: vec![],
         file_size_bytes,
         uploaded_at: Utc::now(),
-        weights_summary: format!("{file_format} loaded successfully ({file_size_bytes} bytes). Ready for test set evaluation."),
+        weights_summary: format!(
+            "{file_format} file stored in session memory ({file_size_bytes} bytes). It has not been loaded or inspected."
+        ),
     };
 
     if let Ok(mut lock) = state.ingested_models.write() {
@@ -465,258 +566,181 @@ pub async fn list_ingested_models(
 }
 
 /// POST /api/v1/models/evaluate-ingested (Issue #20, #32)
+///
+/// Uploaded model files are stored but cannot be executed by this service, so this
+/// endpoint returns an explicit error instead of producing metrics. Real on-device
+/// evaluation of ONNX models is tracked in #46.
 pub async fn evaluate_ingested_model(
     State(state): State<AppState>,
     Json(req): Json<IngestedModelEvaluationRequest>,
 ) -> Result<Json<ExecutionResponse>, (StatusCode, Json<StandardErrorResponse>)> {
-    let start_time = Instant::now();
-
-    // 1. Verify model exists
-    let model_meta = {
-        let lock = state.ingested_models.read().map_err(|_| {
-            (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(StandardErrorResponse::new(
-                    "LOCK_ERROR",
-                    "Internal state lock poisoned.",
-                    None,
-                )),
-            )
-        })?;
-        match lock.get(&req.model_id) {
-            Some(m) => m.clone(),
-            None => {
-                return Err((
-                    StatusCode::NOT_FOUND,
-                    Json(StandardErrorResponse::new(
-                        "MODEL_NOT_FOUND",
-                        &format!(
-                            "Ingested model '{}' was not found in active session.",
-                            req.model_id
-                        ),
-                        None,
-                    )),
-                ));
-            }
-        }
-    };
-
-    // 2. Fetch test dataset records
-    let records: Vec<serde_json::Value> = {
-        let cleaned_lock = state.cleaned_datasets.read().ok();
-        let from_cleaned = cleaned_lock
-            .as_ref()
-            .and_then(|c| c.get(&req.dataset_id))
-            .map(|c| {
-                c.records
-                    .iter()
-                    .map(|rec| serde_json::to_value(rec).unwrap_or_default())
-                    .collect::<Vec<_>>()
-            });
-
-        if let Some(r) = from_cleaned {
-            r
-        } else {
-            // Default sample test records if dataset not explicitly loaded
-            vec![
-                serde_json::json!({"sepal_length": 5.1, "sepal_width": 3.5, "petal_length": 1.4, "petal_width": 0.2, "species": "setosa"}),
-                serde_json::json!({"sepal_length": 4.9, "sepal_width": 3.0, "petal_length": 1.4, "petal_width": 0.2, "species": "setosa"}),
-                serde_json::json!({"sepal_length": 7.0, "sepal_width": 3.2, "petal_length": 4.7, "petal_width": 1.4, "species": "versicolor"}),
-                serde_json::json!({"sepal_length": 6.4, "sepal_width": 3.2, "petal_length": 4.5, "petal_width": 1.5, "species": "versicolor"}),
-                serde_json::json!({"sepal_length": 6.3, "sepal_width": 3.3, "petal_length": 6.0, "petal_width": 2.5, "species": "virginica"}),
-                serde_json::json!({"sepal_length": 5.8, "sepal_width": 2.7, "petal_length": 5.1, "petal_width": 1.9, "species": "virginica"}),
-            ]
-        }
-    };
-
-    if records.is_empty() {
+    let known = state
+        .ingested_models
+        .read()
+        .map(|models| models.contains_key(&req.model_id))
+        .unwrap_or(false);
+    if !known {
         return Err((
-            StatusCode::BAD_REQUEST,
+            StatusCode::NOT_FOUND,
             Json(StandardErrorResponse::new(
-                "EMPTY_DATASET",
-                "Dataset contains no records to evaluate.",
+                "MODEL_NOT_FOUND",
+                &format!(
+                    "Ingested model '{}' was not found in active session.",
+                    req.model_id
+                ),
                 None,
             )),
         ));
     }
 
-    // Determine target column and features
-    let target_col = req.target_column.clone().unwrap_or_else(|| {
-        if let Some(serde_json::Value::Object(map)) = records.first() {
-            if map.contains_key("species") {
-                "species".to_string()
-            } else if map.contains_key("target") {
-                "target".to_string()
-            } else {
-                map.keys()
-                    .last()
-                    .cloned()
-                    .unwrap_or_else(|| "target".to_string())
-            }
-        } else {
-            "target".to_string()
+    Err((
+        StatusCode::NOT_IMPLEMENTED,
+        Json(StandardErrorResponse::new(
+            "MODEL_EXECUTION_UNAVAILABLE",
+            "Uploaded model files cannot be executed yet, so no metrics can be produced. Train a built-in model instead.",
+            None,
+        )),
+    ))
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::preprocessing::parse_csv_summary;
+
+    /// Loads a CSV straight into the session, as the upload handler would.
+    fn state_with_csv(id: &str, csv: &str) -> AppState {
+        let state = AppState::default();
+        let (raw, summary) = parse_csv_summary(id, "data.csv", csv.as_bytes()).unwrap();
+        state
+            .raw_datasets
+            .write()
+            .unwrap()
+            .insert(id.to_string(), raw);
+        state
+            .upload_summaries
+            .write()
+            .unwrap()
+            .insert(id.to_string(), summary);
+        state
+    }
+
+    fn two_class_csv() -> String {
+        let mut csv = String::from("x,y,label\n");
+        for i in 0..20 {
+            let label = if i % 2 == 0 { "a" } else { "b" };
+            csv.push_str(&format!("{},{},{}\n", i, i * 2, label));
         }
-    });
+        csv
+    }
 
-    let feature_cols: Vec<String> = if !req.feature_columns.is_empty() {
-        req.feature_columns
-    } else {
-        if let Some(serde_json::Value::Object(map)) = records.first() {
-            map.keys().filter(|&k| k != &target_col).cloned().collect()
-        } else {
-            vec![]
-        }
-    };
-
-    let mut feature_matrix = Vec::with_capacity(records.len());
-    let mut ground_truth_labels = Vec::with_capacity(records.len());
-    let mut ground_truth_values = Vec::with_capacity(records.len());
-
-    for rec in &records {
-        if let serde_json::Value::Object(map) = rec {
-            let mut row = Vec::with_capacity(feature_cols.len());
-            for col in &feature_cols {
-                let v = map
-                    .get(col)
-                    .and_then(|val| {
-                        if let Some(num) = val.as_f64() {
-                            Some(num)
-                        } else if let Some(txt) = val.as_str() {
-                            txt.parse::<f64>().ok()
-                        } else {
-                            None
-                        }
-                    })
-                    .unwrap_or(0.0);
-                row.push(v);
-            }
-            feature_matrix.push(row);
-
-            if let Some(t_val) = map.get(&target_col) {
-                ground_truth_labels.push(
-                    t_val
-                        .as_str()
-                        .map(|s| s.to_string())
-                        .unwrap_or_else(|| t_val.to_string()),
-                );
-                ground_truth_values.push(t_val.as_f64().unwrap_or_else(|| {
-                    t_val
-                        .as_str()
-                        .and_then(|s| s.parse::<f64>().ok())
-                        .unwrap_or(0.0)
-                }));
-            } else {
-                ground_truth_labels.push("unknown".to_string());
-                ground_truth_values.push(0.0);
-            }
+    fn request(dataset_id: &str, task: &str, target: Option<&str>) -> ExecutionRequest {
+        ExecutionRequest {
+            dataset_id: dataset_id.to_string(),
+            task_type: task.to_string(),
+            algorithm: "Decision Tree Classifier".to_string(),
+            target_column: target.map(String::from),
+            feature_columns: vec!["x".to_string(), "y".to_string()],
+            test_split_ratio: Some(0.2),
+            num_clusters: None,
+            data: None,
         }
     }
 
-    let execution_id = format!("eval-{}", Uuid::new_v4());
-    let test_samples = records.len();
-    let is_regression = model_meta.task_type.to_lowercase() == "regression";
+    #[test]
+    fn unknown_dataset_is_an_error_not_sample_data() {
+        let state = AppState::default();
+        let (status, err) =
+            execute_model_internal(&state, request("missing", "classification", Some("label")))
+                .unwrap_err();
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert_eq!(err.error.code, "DATASET_NOT_FOUND");
+    }
 
-    let (metrics_result, mut comp_entry) = if is_regression {
-        let pred_values: Vec<f64> = feature_matrix
-            .iter()
-            .enumerate()
-            .map(|(i, row)| {
-                let sum: f64 = row
-                    .iter()
-                    .enumerate()
-                    .map(|(j, &v)| v * ((j + 1) as f64 * 0.4))
-                    .sum();
-                if !ground_truth_values.is_empty() {
-                    0.85 * ground_truth_values[i % ground_truth_values.len()] + 0.15 * sum
-                } else {
-                    sum
-                }
-            })
-            .collect();
+    #[test]
+    fn complete_dataset_trains_without_preprocessing() {
+        let state = state_with_csv("d1", &two_class_csv());
+        let res =
+            execute_model_internal(&state, request("d1", "classification", Some("label"))).unwrap();
+        assert_eq!(res.train_samples + res.test_samples, 20);
+    }
 
-        let reg_metrics = compute_regression_metrics(&ground_truth_values, &pred_values);
-        let mut summary_map = HashMap::new();
-        summary_map.insert("mae".to_string(), reg_metrics.mean_absolute_error);
-        summary_map.insert("mse".to_string(), reg_metrics.mean_squared_error);
-        summary_map.insert("rmse".to_string(), reg_metrics.root_mean_squared_error);
-        summary_map.insert("r2".to_string(), reg_metrics.r2_score);
+    #[test]
+    fn dataset_with_gaps_must_be_preprocessed_first() {
+        let csv = two_class_csv().replacen("0,0,a", "0,,a", 1);
+        let state = state_with_csv("d1", &csv);
+        let (status, err) =
+            execute_model_internal(&state, request("d1", "classification", Some("label")))
+                .unwrap_err();
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+        assert_eq!(err.error.code, "DATASET_NEEDS_PREPROCESSING");
+    }
 
-        let entry = ModelComparisonEntry {
-            execution_id: execution_id.clone(),
-            dataset_id: req.dataset_id.clone(),
-            task_type: "Regression".to_string(),
-            algorithm: format!(
-                "Ingested: {} ({})",
-                model_meta.filename, model_meta.file_format
-            ),
-            executed_at: Utc::now(),
-            train_time_ms: 0.0,
-            primary_metric_name: "R2 Score".to_string(),
-            primary_metric_value: reg_metrics.r2_score,
-            summary_metrics: summary_map,
+    #[test]
+    fn text_feature_is_rejected_instead_of_becoming_zero() {
+        let state = state_with_csv("d1", &two_class_csv());
+        let mut req = request("d1", "classification", Some("x"));
+        req.feature_columns = vec!["label".to_string()];
+        let (_, err) = execute_model_internal(&state, req).unwrap_err();
+        assert_eq!(err.error.code, "NON_NUMERIC_VALUE");
+    }
+
+    #[test]
+    fn missing_target_column_is_rejected() {
+        let state = state_with_csv("d1", &two_class_csv());
+        let (_, err) =
+            execute_model_internal(&state, request("d1", "classification", None)).unwrap_err();
+        assert_eq!(err.error.code, "MISSING_TARGET_COLUMN");
+
+        let (_, err) =
+            execute_model_internal(&state, request("d1", "classification", Some("nope")))
+                .unwrap_err();
+        assert_eq!(err.error.code, "UNKNOWN_COLUMN");
+    }
+
+    #[test]
+    fn clustering_requires_explicit_k() {
+        let state = state_with_csv("d1", &two_class_csv());
+        let mut req = request("d1", "clustering", None);
+        req.algorithm = "K-Means Clustering".to_string();
+        let (_, err) = execute_model_internal(&state, req.clone()).unwrap_err();
+        assert_eq!(err.error.code, "MISSING_CLUSTER_COUNT");
+
+        req.num_clusters = Some(2);
+        assert!(execute_model_internal(&state, req).is_ok());
+    }
+
+    #[tokio::test]
+    async fn uploaded_model_evaluation_never_invents_metrics() {
+        let state = AppState::default();
+        let meta = IngestedModelMetadata {
+            model_id: "m1".to_string(),
+            filename: "model.onnx".to_string(),
+            file_format: "ONNX (.onnx)".to_string(),
+            task_type: "classification".to_string(),
+            architecture: "test".to_string(),
+            input_features: None,
+            output_classes: None,
+            class_labels: vec![],
+            file_size_bytes: 3,
+            uploaded_at: Utc::now(),
+            weights_summary: String::new(),
         };
-        (MetricResults::Regression(reg_metrics), entry)
-    } else {
-        let mut known_classes = ground_truth_labels.clone();
-        known_classes.sort();
-        known_classes.dedup();
-        if known_classes.is_empty() {
-            known_classes = vec!["class_0".to_string(), "class_1".to_string()];
-        }
+        state
+            .ingested_models
+            .write()
+            .unwrap()
+            .insert("m1".to_string(), meta);
 
-        let pred_labels: Vec<String> = ground_truth_labels
-            .iter()
-            .enumerate()
-            .map(|(i, truth)| {
-                if i % 8 == 0 && known_classes.len() > 1 {
-                    known_classes[(i + 1) % known_classes.len()].clone()
-                } else {
-                    truth.clone()
-                }
-            })
-            .collect();
-
-        let class_metrics = compute_classification_metrics(&ground_truth_labels, &pred_labels);
-        let mut summary_map = HashMap::new();
-        summary_map.insert("accuracy".to_string(), class_metrics.accuracy);
-        summary_map.insert("precision".to_string(), class_metrics.precision);
-        summary_map.insert("recall".to_string(), class_metrics.recall);
-        summary_map.insert("f1_score".to_string(), class_metrics.f1_score);
-
-        let entry = ModelComparisonEntry {
-            execution_id: execution_id.clone(),
-            dataset_id: req.dataset_id.clone(),
-            task_type: "Classification".to_string(),
-            algorithm: format!(
-                "Ingested: {} ({})",
-                model_meta.filename, model_meta.file_format
-            ),
-            executed_at: Utc::now(),
-            train_time_ms: 0.0,
-            primary_metric_name: "Accuracy".to_string(),
-            primary_metric_value: class_metrics.accuracy,
-            summary_metrics: summary_map,
+        let req = IngestedModelEvaluationRequest {
+            model_id: "m1".to_string(),
+            dataset_id: "d1".to_string(),
+            target_column: None,
+            feature_columns: vec![],
         };
-        (MetricResults::Classification(class_metrics), entry)
-    };
-
-    let elapsed = start_time.elapsed().as_secs_f64() * 1000.0;
-    comp_entry.train_time_ms = (elapsed * 100.0).round() / 100.0;
-
-    state.comparison_store.record_run(comp_entry.clone());
-
-    Ok(Json(ExecutionResponse {
-        execution_id,
-        dataset_id: req.dataset_id,
-        task_type: model_meta.task_type,
-        algorithm: format!(
-            "Ingested: {} ({})",
-            model_meta.filename, model_meta.file_format
-        ),
-        train_time_ms: comp_entry.train_time_ms,
-        train_samples: 0,
-        test_samples,
-        metrics: metrics_result,
-        comparison_entry: comp_entry,
-    }))
+        let (status, Json(err)) = evaluate_ingested_model(State(state), Json(req))
+            .await
+            .unwrap_err();
+        assert_eq!(status, StatusCode::NOT_IMPLEMENTED);
+        assert_eq!(err.error.code, "MODEL_EXECUTION_UNAVAILABLE");
+    }
 }
