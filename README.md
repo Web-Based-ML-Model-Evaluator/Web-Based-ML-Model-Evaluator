@@ -1,52 +1,51 @@
-# ML Lab — High-Performance Web-Based Machine Learning Platform
+# ML Lab — Web-Based ML Model Evaluator
 
-[![Rust Backend Tests](https://img.shields.io/badge/Rust_Tests-111_Passed-brightgreen.svg)](#8-testing--verification)
-[![TypeScript](https://img.shields.io/badge/TypeScript-Strict_0_Errors-blue.svg)](#5-technology-stack)
-[![WebGPU](https://img.shields.io/badge/Hardware_Accel-WebGPU_%26_VRAM-orange.svg)](#33-browser-gpu--vram-acceleration-webgpu)
-[![ISO/IEC 25010](https://img.shields.io/badge/Compliance-ISO%2FIEC_25010-purple.svg)](#53-security-compliance--memory-model)
+[![CI](https://github.com/Web-Based-ML-Model-Evaluator/Web-Based-ML-Model-Evaluator/actions/workflows/ci.yml/badge.svg)](https://github.com/Web-Based-ML-Model-Evaluator/Web-Based-ML-Model-Evaluator/actions/workflows/ci.yml)
+[![Deploy](https://github.com/Web-Based-ML-Model-Evaluator/Web-Based-ML-Model-Evaluator/actions/workflows/cd.yml/badge.svg)](https://github.com/Web-Based-ML-Model-Evaluator/Web-Based-ML-Model-Evaluator/actions/workflows/cd.yml)
 
-> **A production-grade, single-author, unified Machine Learning evaluation platform and training engine built in Rust and React with WebGPU hardware acceleration.**
+> **Train and evaluate machine learning models entirely in your browser, on your own device.**
+> The Rust ML engine is compiled to WebAssembly and runs in a Web Worker; uploaded ONNX models run on your GPU through WebGPU. The web server only delivers the files: no dataset, model or result ever leaves your device.
+
+**Live site:** https://web-based-ml-model-evaluator.github.io/Web-Based-ML-Model-Evaluator/
 
 ---
 
 ## Table of Contents
 
-1. [Executive Summary](#1-executive-summary)
+1. [Summary](#1-summary)
 2. [Key Capabilities & Feature Matrix](#2-key-capabilities--feature-matrix)
 3. [System Architecture](#3-system-architecture)
-   - [3.1 High-Level Architecture](#31-high-level-architecture)
-   - [3.2 Unified In-Memory Pipeline](#32-unified-in-memory-pipeline)
-   - [3.3 Browser GPU & VRAM Acceleration (WebGPU)](#33-browser-gpu--vram-acceleration-webgpu)
-4. [End-to-End Execution Pipelines](#4-end-to-end-execution-pipelines)
+   - [3.1 What runs where](#31-what-runs-where)
+   - [3.2 In-memory pipeline](#32-in-memory-pipeline)
+   - [3.3 GPU use (WebGPU)](#33-gpu-use-webgpu)
+4. [End-to-End Workflows](#4-end-to-end-workflows)
    - [4.1 Workflow A: 4-Step Model Training Wizard](#41-workflow-a-4-step-model-training-wizard)
-   - [4.2 Workflow B: 2-Step Ingested Model Evaluation](#42-workflow-b-2-step-ingested-model-evaluation)
+   - [4.2 Workflow B: Evaluate an Uploaded Model](#42-workflow-b-evaluate-an-uploaded-model)
 5. [Technology Stack](#5-technology-stack)
-   - [5.1 Backend Technologies](#51-backend-technologies)
-   - [5.2 Frontend Technologies](#52-frontend-technologies)
-   - [5.3 Security, Compliance & Memory Model](#53-security-compliance--memory-model)
-6. [API Reference & Route Specification](#6-api-reference--route-specification)
-7. [Directory Structure Walkthrough](#7-directory-structure-walkthrough)
-8. [Testing & Verification](#8-testing--verification)
-9. [Getting Started & Quick Start](#9-getting-started--quick-start)
-10. [Consolidated Documentation](#10-consolidated-documentation)
+6. [Engine API](#6-engine-api)
+7. [Directory Structure](#7-directory-structure)
+8. [Testing & CI](#8-testing--ci)
+9. [Getting Started](#9-getting-started)
+10. [Deployment](#10-deployment)
+11. [Browser Requirements](#11-browser-requirements)
+12. [Consolidated Documentation](#12-consolidated-documentation)
 
 ---
 
-## 1. Executive Summary
+## 1. Summary
 
-**ML Lab** is an end-to-end, high-performance web platform engineered for students, educators, and data scientists to train custom machine learning algorithms and evaluate pre-trained models.
+**ML Lab** lets students, educators and data scientists train machine learning models on their own CSV data and evaluate models they trained elsewhere, without installing anything.
 
-The system replaces fragmented multi-service skeletons with a **zero-latency unified in-memory architecture** written in **Rust** (`axum`, `tokio`, `smartcore`) coupled with a responsive **React 18 + TypeScript** client featuring client-side **WebGPU compute shaders** for hardware-accelerated training.
+When you open the site, your browser downloads the application once: a React interface plus the ML engine, written in **Rust** and compiled to **WebAssembly**. From then on every step (parsing the CSV, cleaning it, training, scoring, comparing) runs **on your device**, in your browser tab's memory. The site keeps working even if you go offline after it has loaded.
 
-### Core Distinctions
-- **Zero Inter-Process Overhead:** All dataset ingestion, missing value imputation, configuration validation, model execution, and multi-model leaderboard ranking execute within a single high-performance Rust binary (`backend/`).
-- **WebGPU Client Acceleration:** Leverages the client's local graphics processor (NVIDIA, AMD, Intel, Apple Silicon) and dedicated Video RAM (VRAM) via WGSL compute shaders directly from the browser for parallel matrix evaluations.
-- **Dual User Journeys:**
-  - *Train a Model:* A guided 4-step wizard (Ingestion $\to$ Task Routing $\to$ Training & Metrics $\to$ Leaderboard).
-  - *Evaluate a Model:* A streamlined 2-input workflow designed specifically for students: simply insert a model file (`.pt`, `.joblib`, `.pkl`, `.h5`, `.onnx`) and test dataset to receive instant performance metrics.
-- **Interactive Educational UX (`InfoTooltip`):** Subtle circular `ⓘ` icons across every metric, parameter, and algorithm that display crisp, rectangular explanation cards on click or hover.
-- **Warm Parchment Editorial Aesthetic:** Handcrafted visual identity with paper-fiber texture background, Playfair Display serif typography, brush underlines, framing corner brackets, and stacked-diamond branding.
-- **Volatile RAM Security (SEC-1 / SEC-3):** Pure in-memory session isolation ensures zero persistent data or customer datasets are written to disk; one-click session purge securely erases all runtime buffers from volatile memory.
+### Core points
+- **No backend processing.** The server is a static file host (GitHub Pages). There are no API calls during use.
+- **Your data stays local.** Datasets and results live only in the tab's memory (SEC-1); closing the tab or clicking **Purge RAM** discards them (SEC-3).
+- **Two journeys:**
+  - *Train a Model:* a guided 4-step wizard (Ingestion → Task Routing → Training & Metrics → Leaderboard).
+  - *Evaluate a Model:* upload a trained **ONNX** model and a test CSV to get its real accuracy / R² on your data.
+- **Honest results.** Every metric comes from a model that actually ran; missing data, invalid columns or unsupported files produce clear errors instead of placeholder numbers.
+- **Interactive explanations** (`InfoTooltip`) on every metric and parameter.
 
 ---
 
@@ -54,409 +53,333 @@ The system replaces fragmented multi-service skeletons with a **zero-latency uni
 
 | ID | Requirement Area | Capability & Implementation Details |
 | :--- | :--- | :--- |
-| **FR-1** | Dataset Upload | Multipart streaming upload for CSV files up to 10 MB with RFC 4180 parsing, UTF-8 sanitation, and path traversal protection. |
-| **FR-2** | Preview & Summary | Dynamic column-level schema inference (`Numeric` vs. `Categorical`), missing value counts, percentages, and 5-row interactive preview table. |
-| **FR-3** | Imputation & Cleaning | Column-wise missing value imputation (**Mean**, **Median**, **Mode**, **Custom Constant**, or **Drop Column**), duplicate row deduplication, and whitespace trimming. |
-| **FR-4** | Task Selection | Automatic routing between **Classification**, **Regression**, and **Clustering** with dynamic algorithm compatibility matrices. |
-| **FR-5** | Features & Targets | Multi-feature selection with automated target validation; prevents selecting target column inside feature sets. |
-| **FR-6** | Clustering Hyperparams | Dynamic cluster configuration ($k \ge 2$) with deterministic K-Means++ seeding and maximum iteration controls. |
-| **FR-7** | Train/Test Split | Strict boundary enforcement (5% to 50% test split; default 20%) with deterministic splitting. Classification uses stratified splitting to preserve class proportions, while regression and clustering use repeatable pseudorandom shuffling (`split_shuffled`). |
-| **FR-8** | Model Dispatching | Execution dispatcher covering linear, ensemble, nearest neighbors, multi-layer perceptron (MLP), and 1D CNN models. |
-| **FR-9** | Classification Metrics | Accuracy, Precision (Macro), Recall (Macro), F1 Score, and an interactive $N \times N$ Confusion Matrix heatmap with raw count / percentage toggles. |
-| **FR-10** | Regression Metrics | Mean Absolute Error (MAE), Mean Squared Error (MSE), Root Mean Squared Error (RMSE), and Coefficient of Determination ($R^2$ Score). |
-| **FR-11** | Unsupervised Metrics | Silhouette Score, Davies-Bouldin Index, and 2D Principal Component Analysis (PCA) projection onto principal axes (PC1 vs PC2). |
-| **FR-12** | Model Leaderboard | Multi-model side-by-side leaderboard ranking candidates by primary task metrics with visual performance gap bars. |
-| **FR-13** | Structured Errors | Standardized JSON error response contract (`code`, `message`, `module`, `timestamp`) with internal panic guards. |
-| **#31** | Model File Ingestion | Ingestion engine supporting PyTorch (`.pt`, `.pth`), Scikit-Learn (`.joblib`, `.pkl`), Keras (`.h5`), and ONNX (`.onnx`) formats. |
-| **#32** | Test Dataset Inference | Calibrated inference execution for ingested models against uploaded test datasets. |
-| **#35** | MLP Neural Network | In-tree multi-layer perceptron with backpropagation, Xavier/He initialization, LeakyReLU activations, and Cross-Entropy/MSE loss. |
-| **#36** | 1D CNN Model | In-tree 1D Convolutional Neural Network with filter banks, global average pooling, and dense prediction heads. |
-| **NFR-1** | Latency Budget | Sub-second execution for all tabular models ($<30,000\text{ms}$ budget strictly enforced by architecture). |
-| **NFR-2** | Portability | Platform-agnostic (Windows, macOS, Linux, modern Chromium/Firefox browsers with WebGPU). |
-| **SEC-1** | RAM Isolation | In-memory `Arc<RwLock<AppState>>` storage with atomic global session purge (`POST /api/v1/session/purge`). |
+| **FR-1** | Dataset Upload | CSV files up to 10 MB parsed on-device (RFC 4180, UTF-8 checks, filename sanitisation). |
+| **FR-2** | Preview & Summary | Column type inference (`Numeric` / `Categorical`), missing value counts and percentages, 5-row preview. |
+| **FR-3** | Imputation & Cleaning | Per-column **Mean**, **Median**, **Mode**, **Constant**, **Drop rows** or **Drop column**; duplicate removal and whitespace trimming. Datasets with gaps must be cleaned before training. |
+| **FR-4** | Task Selection | **Classification**, **Regression** and **Clustering**, each with its compatible algorithms. |
+| **FR-5** | Features & Targets | Feature/target selection with validation (target can't be a feature; columns must exist and be numeric). |
+| **FR-6** | Clustering Parameters | K-Means with an explicit number of clusters (k ≥ 2). |
+| **FR-7** | Train/Test Split | 5%–50% test split (default 20%). Classification uses stratified splitting to preserve class proportions; regression and clustering use a repeatable shuffle (`split_shuffled`). |
+| **FR-8** | Model Execution | Logistic/Linear Regression, Decision Trees, Random Forests, KNN (smartcore), plus in-tree MLP and 1D CNN networks. |
+| **FR-9** | Classification Metrics | Accuracy, macro Precision / Recall / F1 and an N × N confusion matrix (counts or percentages). |
+| **FR-10** | Regression Metrics | MAE, MSE, RMSE and R². |
+| **FR-11** | Clustering Metrics | Silhouette score, Davies-Bouldin index and a 2D PCA projection (PC1 vs PC2). |
+| **FR-12** | Model Leaderboard | Side-by-side ranking of runs of the same task by their primary metric. |
+| **FR-13** | Structured Errors | Every failure returns `{ error: { code, message, module, timestamp } }`. |
+| **#46** | Uploaded Models | `.onnx` models run on-device with ONNX Runtime Web (WebGPU, or WebAssembly on the CPU). Other formats get advice on exporting to ONNX. |
+| **#35 / #36** | MLP & 1D CNN | Pure-Rust multi-layer perceptron and 1D convolutional network with backpropagation. |
+| **NFR-1** | Latency Budget | Runs over 30 s are reported as `PIPELINE_LATENCY_EXCEEDED`. |
+| **NFR-2** | Portability | Any modern browser on Windows, macOS or Linux; nothing to install. |
+| **SEC-1 / SEC-3** | Memory isolation | All state lives in one browser tab and is cleared by **Purge RAM** or by closing the tab. |
 
 ---
 
 ## 3. System Architecture
 
-### 3.1 High-Level Architecture
+### 3.1 What runs where
 
 ```mermaid
-flowchart TD
-    subgraph Client ["Client Browser (React 18 + TypeScript + Vite)"]
-        UI["Parchment UI & Action Cards\n(Train vs. Evaluate)"]
-        Tooltip["Subtle InfoTooltip (ⓘ)\nInstant Educational Popovers"]
-        WebGPU["WebGPU Engine (webgpu.ts)\nWGSL Compute Shaders & VRAM Buffer"]
-        APIClient["API Client (services/api.ts)\nAxum REST Client"]
+flowchart LR
+    Host["Static host (GitHub Pages)\nserves HTML, JS, .wasm once"]
+
+    subgraph Device ["Visitor's device (browser tab)"]
+        UI["React UI\n(main thread)"]
+        subgraph Worker ["Engine Web Worker"]
+            Engine["ML engine\nRust → WebAssembly\n(engine/)"]
+            ORT["ONNX Runtime Web\n(uploaded models)"]
+        end
+        CPU["CPU + RAM"]
+        GPU["GPU + VRAM\n(WebGPU)"]
     end
 
-    subgraph Server ["Unified Backend Engine (Rust / Axum :8080)"]
-        Router["Axum HTTP Router & CORS Middleware\n(backend/src/api/mod.rs)"]
-        
-        subgraph Controllers ["API Controllers"]
-            DS_API["datasets.rs\nUpload, Preview, Preprocess"]
-            RO_API["routing.rs\nTask Validation & Dispatch"]
-            MO_API["models.rs\nExecution & Ingestion"]
-            CO_API["comparison.rs\nLeaderboard Ranking"]
-            HW_API["hardware.rs\nDiagnostics & Probe"]
-        end
-
-        subgraph Core ["Computational Core"]
-            VAL["core/validator.rs\nSanitization & UTF-8"]
-            PRE["core/preprocessing.rs\nImputation & Deduplication"]
-            ROUT["core/router_validation.rs\nHyperparameter Bounds"]
-            
-            subgraph ML ["core/ml/"]
-                ALG["algorithms.rs\nClassifiers & Regressors"]
-                NN["nn.rs\nMLP & 1D CNN Engine"]
-                MET["metrics.rs\nConfusion Matrix & Scores"]
-                HW["hardware_accel.rs\nSystem Threading Diagnostics"]
-            end
-        end
-
-        subgraph MemoryStore ["Volatile In-Memory AppState (SEC-1)"]
-            RAM_DS["raw_datasets & cleaned_datasets"]
-            RAM_MOD["ingested_models"]
-            RAM_COMP["comparison_store"]
-        end
-    end
-
-    UI --> APIClient
-    UI --> Tooltip
-    UI --> WebGPU
-    APIClient <==>|HTTP / REST JSON| Router
-    Router --> DS_API & RO_API & MO_API & CO_API & HW_API
-    DS_API --> VAL & PRE
-    RO_API --> ROUT
-    MO_API --> ALG & NN & MET
-    CO_API --> RAM_COMP
-    Controllers <==> MemoryStore
+    Host -- "files only, on first load" --> UI
+    UI <-- "postMessage" --> Worker
+    Engine --> CPU
+    ORT --> GPU
+    ORT -. "no WebGPU: WebAssembly" .-> CPU
 ```
 
----
+- **Static host:** delivers `index.html`, the JavaScript bundle and the engine's `.wasm` file. It does no computation.
+- **UI (main thread):** `frontend/src` — React views. They call the engine through `services/api.ts`.
+- **Engine worker:** `frontend/src/engine/engine.worker.ts` loads the WebAssembly engine once and keeps the session (datasets, cleaned data, results) in its memory. Training runs here, so the page never freezes.
+- **Rust engine:** `engine/` — preprocessing, validation, algorithms, metrics and the leaderboard, exposed through one `Session` API (see [Engine API](#6-engine-api)).
+- **ONNX Runtime Web:** loaded into the same worker only when a model is uploaded.
 
-### 3.2 Unified In-Memory Pipeline
-
-Unlike legacy microservice designs that serialised intermediate datasets across local ports (`8001`, `8002`, `8003`), ML Lab unifies all operations inside a single address space:
+### 3.2 In-memory pipeline
 
 ```
-[Raw CSV Upload] ──> [Stream Validator] ──> [Imputation Engine] ──> [Cleaned RAM Cache]
-                                                                            │
-   ┌────────────────────────────────────────────────────────────────────────┘
+[CSV file] ─> [Validate & parse] ─> [Impute / clean] ─> [Cleaned data in worker memory]
+                                                               │
+   ┌───────────────────────────────────────────────────────────┘
    ▼
-[Task Validation] ──> [Deterministic Split] ──> [Standardization] ──> [Model Dispatch]
-                                                                            │
-   ┌────────────────────────────────────────────────────────────────────────┘
+[Validate config] ─> [Split (stratified / shuffled)] ─> [Standardise] ─> [Train & predict]
+                                                               │
+   ┌───────────────────────────────────────────────────────────┘
    ▼
-[Metric Evaluator] ──> [Comparison Store] ──> [Live Side-by-Side Leaderboard]
+[Metrics] ─> [Comparison store] ─> [Leaderboard]
 ```
 
-- **Thread Safety:** State is guarded by `Arc<RwLock<HashMap<...>>>`, permitting concurrent read access across Tokio worker threads with non-blocking write synchronization.
-- **Port Conflict Resolution:** Primary server automatically binds to port `8080` (with adaptive fallbacks), eliminating Windows `WSAEACCES (10013)` port conflicts.
+Nothing is serialised to disk or sent over the network at any step. If the engine ever hits an unrecoverable error (a WebAssembly trap), the page restarts the worker and tells the user the session was reset.
+
+### 3.3 GPU use (WebGPU)
+
+- **Uploaded ONNX models** run through ONNX Runtime Web's **WebGPU** backend when the browser offers it, so the model's tensors live in GPU memory (VRAM). Without WebGPU they run on the CPU through WebAssembly. The results screen shows which one was used.
+- **Built-in models** (smartcore, MLP, CNN) train on the **CPU** in WebAssembly, single-threaded.
+- The **Your Device** panel shows CPU threads, approximate RAM and the GPU exactly as the browser reports them. Browsers do not reveal total VRAM, so none is shown. Its **Measure GPU vs CPU** button runs a real WGSL compute shader (a point-to-center distance matrix) and the same computation in JavaScript, and reports both measured times.
 
 ---
 
-### 3.3 Browser GPU & VRAM Acceleration (WebGPU)
-
-ML Lab features an integrated **WebGPU execution engine** (`frontend/src/services/webgpu.ts`):
-
-1. **Hardware Probe:** Discovers the active GPU adapter name, vendor ID, architecture, and feature sets (`requestAdapter()`).
-2. **VRAM Buffer Allocation:** Instantiates dedicated device storage buffers (`GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST`) directly in physical VRAM.
-3. **WGSL Compute Pipeline:** Compiles and executes custom **WebGPU Shading Language (WGSL)** compute kernels:
-   ```wgsl
-   @group(0) @binding(0) var<storage, read> inputA: array<f32>;
-   @group(0) @binding(1) var<storage, read> inputB: array<f32>;
-   @group(0) @binding(2) var<storage, read_write> output: array<f32>;
-
-   @compute @workgroup_size(64)
-   fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-       let idx = global_id.x;
-       output[idx] = inputA[idx] * inputB[idx] + sqrt(inputA[idx]);
-   }
-   ```
-4. **Benchmarking:** Calculates floating-point throughput across $262,144$ elements, measuring real-time execution duration and compute speed.
-
----
-
-## 4. End-to-End Execution Pipelines
+## 4. End-to-End Workflows
 
 ### 4.1 Workflow A: 4-Step Model Training Wizard
 
 ```mermaid
 sequenceDiagram
     autonumber
-    actor User as Student / User
-    participant UI as React Frontend
-    participant Server as Unified Rust Engine
-    participant ML as ML & Metric Core
+    actor User
+    participant UI as React UI
+    participant W as Engine Worker (WebAssembly)
 
-    Note over User,Server: Step 1: Data Ingestion & Preprocessing
-    User->>UI: Select CSV file (e.g. iris.csv)
-    UI->>Server: POST /api/v1/datasets/upload
-    Server-->>UI: DatasetUploadResponse (Rows, Columns, Inferred Types, Preview)
-    User->>UI: Configure Imputation (Mean/Median/Mode) & Deduplication
-    UI->>Server: POST /api/v1/datasets/:id/preprocess
-    Server-->>UI: PreprocessingResponse (Cleaned row counts, surviving columns)
+    Note over User,W: Step 1: Data Ingestion & Preprocessing
+    User->>UI: Choose CSV file
+    UI->>W: upload_dataset (file bytes)
+    W-->>UI: Summary: rows, columns, types, missing values, preview
+    User->>UI: Choose imputation rules
+    UI->>W: preprocess
+    W-->>UI: Cleaned row count, remaining columns
 
-    Note over User,Server: Step 2: Task Routing & Configuration
-    User->>UI: Select Task (Classification), Algorithm (Random Forest), Split (20%)
-    UI->>Server: POST /api/v1/config/validate
-    Server-->>UI: ValidationResult (is_valid: true)
+    Note over User,W: Step 2: Task Routing & Configuration
+    User->>UI: Task, algorithm, target, features, split
+    UI->>W: validate_config
+    W-->>UI: Valid, or the list of problems
 
-    Note over User,Server: Step 3: Model Execution & Evaluation
-    UI->>Server: POST /api/v1/pipeline/dispatch
-    Server->>ML: Run Training, Standardize & Predict
-    ML-->>Server: ExecutionResponse (Metrics, Confusion Matrix / R2, Train Time)
-    Server-->>UI: Return Execution Response
+    Note over User,W: Step 3: Training & Evaluation
+    UI->>W: dispatch_pipeline
+    W->>W: Split, standardise, train, predict, score
+    W-->>UI: Metrics, confusion matrix / R² / PCA, timing
 
-    Note over User,Server: Step 4: Leaderboard & Model Comparison
-    UI->>Server: POST /api/v1/models/compare (Candidate Model IDs)
-    Server-->>UI: ComparisonReport (Rankings, Recommendation, Metric Table)
+    Note over User,W: Step 4: Leaderboard
+    UI->>W: compare_models (run ids)
+    W-->>UI: Ranking and recommendation
 ```
 
----
-
-### 4.2 Workflow B: 2-Step Ingested Model Evaluation
-
-Designed specifically for students who already possess a trained model file:
+### 4.2 Workflow B: Evaluate an Uploaded Model
 
 ```mermaid
 sequenceDiagram
     autonumber
     actor Student
-    participant View as SimpleEvaluateModelView
-    participant Backend as Rust Backend Engine
+    participant View as Evaluate screen
+    participant W as Engine Worker
+    participant ORT as ONNX Runtime Web
 
-    Student->>View: 1. Drop Model File (.pt, .joblib, .pkl, .h5, .onnx)
-    View->>Backend: POST /api/v1/models/upload (Multipart)
-    Backend-->>View: IngestedModelMetadata (Format detected, Architecture badge)
+    Student->>View: Upload model.onnx + choose task
+    View->>W: load_model
+    W->>ORT: Create session (WebGPU, else WebAssembly)
+    W-->>View: Inputs/outputs, where it runs
 
-    Student->>View: 2. Drop Test CSV Dataset (or use sample)
-    View->>Backend: POST /api/v1/datasets/upload (if custom CSV)
-    Backend-->>View: Test Dataset Ready
+    Student->>View: Upload test CSV, choose target column
+    View->>W: upload_dataset
 
-    Student->>View: Click "Evaluate Model Now →"
-    View->>Backend: POST /api/v1/models/evaluate-ingested
-    Backend->>Backend: Run Inference on Test Rows & Compute Metrics
-    Backend-->>View: Return Accuracy / R2, Precision, Recall, F1, Confusion Matrix
-    View->>Student: Displays Big Headline Scores + InfoTooltips (ⓘ)
+    Student->>View: Evaluate Model Now
+    View->>W: evaluate_model
+    W->>W: model_inputs (numeric feature columns)
+    W->>ORT: Run model on every row
+    ORT-->>W: Predictions
+    W->>W: record_external_predictions (scored against the CSV's own target)
+    W-->>View: Accuracy / R², precision, recall, F1, confusion matrix
 ```
+
+The model must take a single `[rows, features]` float input with the CSV's numeric feature columns in file order. Label outputs, class-score/logit outputs (the highest score wins) and regression outputs are supported. When a model outputs class numbers but the target holds text labels, they are matched in sorted order and the mapping is shown.
+
+PyTorch, scikit-learn and Keras models can be exported with `torch.onnx.export`, `skl2onnx` or `tf2onnx`. `.pt`, `.pkl`, `.joblib` and `.h5` files need Python to run and are rejected with this advice.
 
 ---
 
 ## 5. Technology Stack
 
-### 5.1 Backend Technologies
+### 5.1 Engine (Rust → WebAssembly)
 
-| Technology | Version | Purpose in ML Lab |
+| Technology | Version | Purpose |
 | :--- | :--- | :--- |
-| **Rust** | `1.80+` (Edition 2021) | Memory-safe, zero-cost abstraction language powering the engine. |
-| **Axum** | `0.7` | High-performance asynchronous HTTP routing with multipart upload streaming. |
-| **Tokio** | `1.0` | Multi-threaded asynchronous runtime handling concurrent I/O. |
-| **SmartCore** | `0.6` | Machine learning algorithms: Logistic Regression, Decision Trees, Random Forests, KNN, Linear Regression, and K-Means. |
-| **In-Tree Neural Engine** | `1.0` | Pure-Rust Multi-Layer Perceptron (MLP) and 1D Convolutional Neural Network (CNN) with backpropagation. |
-| **Serde / Serde JSON** | `1.0` | Zero-allocation contract serialization and deserialization. |
-| **CSV** | `1.3` | High-throughput streaming RFC 4180 CSV parser. |
-| **Tower-HTTP** | `0.5` | Permissive CORS middleware for seamless local and remote browser communication. |
-| **Chrono** | `0.4` | ISO 8601 UTC timestamp tracking for evaluation history and session logging. |
-| **UUID** | `1.0` | Cryptographically secure UUIDv4 generation for dataset and run identifiers. |
+| **Rust** | stable, edition 2021 | Engine language; compiled to `wasm32-unknown-unknown`. |
+| **wasm-bindgen** | `0.2.130` (pinned) | JavaScript bindings for the engine (`Engine.call`). |
+| **smartcore** | `0.6` | Logistic/Linear Regression, Decision Trees, Random Forests, KNN. |
+| **In-tree neural networks** | — | MLP and 1D CNN with backpropagation (`core/ml/nn.rs`). |
+| **csv** | `1.3` | RFC 4180 CSV parsing. |
+| **serde / serde_json** | `1.0` | Engine API messages and results. |
+| **chrono, uuid, web-time** | — | Timestamps, run ids and timings that work in the browser. |
 
----
+### 5.2 Frontend
 
-### 5.2 Frontend Technologies
-
-| Technology | Version | Purpose in ML Lab |
+| Technology | Version | Purpose |
 | :--- | :--- | :--- |
-| **React** | `18.2` | Component-based stateful UI architecture with custom hooks. |
-| **TypeScript** | `5.0+` | Strict static typing guaranteeing end-to-end contract safety. |
-| **WebGPU & WGSL** | Spec | Native browser graphics and parallel compute shader pipeline. |
-| **Vite** | `5.0+` | Lightning-fast ESM bundler building the production client in $<250\text{ms}$. |
-| **HTML5 / CSS3** | Modern | Parchment aesthetic, Playfair Display serif fonts, and responsive layouts. |
+| **React** | `18` | User interface. |
+| **TypeScript** | `5` | Static typing. |
+| **Vite** | `8` | Bundles the app, the worker and the `.wasm` files with relative paths. |
+| **Web Workers** | — | Runs the engine off the main thread. |
+| **ONNX Runtime Web** | `1.31.1` | Runs uploaded ONNX models (WebGPU / WebAssembly). Loaded on demand. |
+| **WebGPU / WGSL** | — | GPU execution of ONNX models and the device benchmark. |
+
+### 5.3 Security, Reliability & Memory Model
+
+- **Data never leaves the device:** there is no backend to send it to. Files are read with the browser's File API and passed to the worker.
+- **Volatile memory only (SEC-1 / SEC-3):** nothing is written to disk or browser storage; **Purge RAM** clears the worker's session and releases loaded models.
+- **Determinism:** splits use a fixed seed (`SPLIT_SEED = 42`), so the same data and configuration give the same results.
+- **Input limits:** 10 MB CSV cap (`FILE_TOO_LARGE`), at least 10 rows and 2 columns, sanitised filenames.
+- **Failure handling:** errors are structured (FR-13). A WebAssembly trap restarts the worker instead of leaving a broken session.
 
 ---
 
-### 5.3 Security, Compliance & Memory Model
+## 6. Engine API
 
-- **ISO/IEC 25010 Quality Model:**
-  - *Functional Suitability:* All machine learning predictions are deterministic across fixed PRNG seeds (`SPLIT_SEED = 42`).
-  - *Performance Efficiency:* Latency is strictly bounded below $30\text{s}$ (sub-$100\text{ms}$ typical).
-  - *Reliability:* Model library panics are caught using `std::panic::catch_unwind(AssertUnwindSafe(...))` and returned as structured HTTP 400 errors instead of crashing the server.
-- **Pure Volatile Memory (SEC-1 / SEC-3):**
-  - Customer data and model weights are **never written to persistent disk storage**.
-  - Calling `POST /api/v1/session/purge` invokes `.purge_all()` across all thread-safe maps, completely clearing all dataset records, models, and comparisons from RAM.
-- **Directory Traversal Protection:** Filenames are sanitized via `sanitize_filename()` to strip `../`, `..\`, null bytes, and path delimiters.
-- **Payload Boundaries:** Strict $10\text{ MB}$ payload cap enforced upfront (`FILE_TOO_LARGE`).
+The engine has one entry point. The page calls `callEngine(method, args, bytes?)` (`frontend/src/engine/client.ts`), which posts a message to the worker; the worker calls `Session::call` in Rust (`engine/src/session.rs`). Results are JSON; failures reject with an `EngineError` carrying the FR-13 `code` and `message`.
 
----
+See **[docs/API_SPECIFICATION.md](docs/API_SPECIFICATION.md)** for every method, its arguments and its result.
 
-## 6. API Reference & Route Specification
-
-Base URL: `http://localhost:8080`
-
-### Datasets API
-- `POST /api/v1/datasets/upload` — Multipart CSV upload; returns dataset summary and preview.
-- `GET /api/v1/datasets/:dataset_id/preview` — Returns 5-row preview and column statistics.
-- `POST /api/v1/datasets/:dataset_id/preprocess` — Applies column imputation and deduplication.
-- `GET /api/v1/datasets/:dataset_id/schema` — Returns surviving column types and summaries.
-- `GET /api/v1/datasets/:dataset_id/data` — Fetches cleaned record payload.
-- `DELETE /api/v1/datasets/:dataset_id` — Erases specific dataset from RAM.
-- `POST /api/v1/session/purge` — Atomic global purge of all session data from RAM.
-
-### Task Routing API
-- `GET /api/v1/config/tasks` — Lists supported task types and available algorithms.
-- `POST /api/v1/config/validate` — Validates problem type, algorithm compatibility, target, and split ratio.
-- `POST /api/v1/pipeline/dispatch` — Dispatches end-to-end execution of cleaned dataset against task config.
-
-### Models & Ingestion API
-- `GET /api/v1/models/supported` — Returns supported algorithms categorized by task.
-- `POST /api/v1/models/execute` — Executes direct training and metric evaluation.
-- `POST /api/v1/models/upload` — Ingests `.pt`, `.joblib`, `.pkl`, `.h5`, `.onnx` pre-trained model file.
-- `GET /api/v1/models/ingested` — Lists all ingested models in active session.
-- `POST /api/v1/models/evaluate-ingested` — Runs inference for an ingested model on a test dataset.
-- `POST /api/v1/models/compare` — Generates multi-model ranking and side-by-side leaderboard report.
-- `GET /api/v1/models/comparison/:session_id` — Retrieves comparison run history.
-
-### Hardware API
-- `GET /api/v1/hardware/status` — Returns CPU parallelism, core counts, and compute diagnostic info.
-- `POST /api/v1/hardware/benchmark` — Executes internal parallel benchmark test.
+| Area | Methods |
+| :--- | :--- |
+| Datasets (FR-1 to FR-3) | `upload_dataset`, `preview`, `preprocess`, `schema`, `cleaned_data`, `purge_dataset`, `purge_session` |
+| Task routing (FR-4 to FR-7) | `list_tasks`, `validate_config`, `dispatch_pipeline` |
+| Execution & comparison (FR-8 to FR-12) | `execute_model`, `comparison_history`, `compare_models` |
+| Uploaded models (#46) | `load_model`, `list_models`, `evaluate_model` (JavaScript, in the worker), backed by `model_inputs` and `record_external_predictions` (Rust) |
 
 ---
 
-## 7. Directory Structure Walkthrough
+## 7. Directory Structure
 
 ```
 Web-Based-ML-Model-Evaluator/
-├── backend/                               # Unified Rust Backend & ML Engine
-│   ├── Cargo.toml                         # Dependency manifest (Axum, Smartcore, Tokio)
+├── engine/                          # Rust ML engine (compiled to WebAssembly)
+│   ├── Cargo.toml                   # cdylib (browser) + rlib (native tests)
 │   ├── src/
-│   │   ├── main.rs                        # Entry point; binds port 8080 with fallbacks
-│   │   ├── lib.rs                         # Crate root exporting modules
-│   │   ├── state.rs                       # AppState with in-memory thread-safe maps
-│   │   ├── api/                           # REST API layer
-│   │   │   ├── mod.rs                     # Axum router definition & CORS configuration
-│   │   │   ├── datasets.rs                # Dataset upload, preview, and imputation routes
-│   │   │   ├── routing.rs                 # Task validation & pipeline dispatch
-│   │   │   ├── models.rs                  # Model execution & pre-trained model ingestion
-│   │   │   ├── comparison.rs              # Multi-model leaderboard & ranking
-│   │   │   └── hardware.rs                # Hardware status & diagnostics
-│   │   ├── core/                          # Algorithmic and validation logic
-│   │   │   ├── validator.rs               # CSV upload and UTF-8 verification
-│   │   │   ├── preprocessing.rs           # Imputation strategies (Mean/Median/Mode)
-│   │   │   ├── router_validation.rs       # Task & split ratio boundary checks
-│   │   │   ├── comparison_store.rs        # Leaderboard storage and ranking engine
+│   │   ├── lib.rs                   # Crate root
+│   │   ├── session.rs               # The engine API: in-memory Session + Session::call
+│   │   ├── wasm.rs                  # wasm-bindgen wrapper exposing Engine.call to JavaScript
+│   │   ├── core/
+│   │   │   ├── validator.rs         # Upload checks, filename sanitisation, size rules
+│   │   │   ├── preprocessing.rs     # CSV parsing, type inference, imputation
+│   │   │   ├── router_validation.rs # Task / algorithm / column / split validation
+│   │   │   ├── comparison_store.rs  # Run history and leaderboard ranking
 │   │   │   └── ml/
-│   │   │       ├── mod.rs                 # ML submodule exports
-│   │   │       ├── algorithms.rs          # Supervised algorithms & K-Means clustering
-│   │   │       ├── nn.rs                  # Pure-Rust MLP & 1D CNN neural networks
-│   │   │       ├── metrics.rs             # Accuracy, F1, R2, MAE, PCA, Silhouette
-│   │   │       └── hardware_accel.rs      # System threading & diagnostics probe
-│   │   └── models/                        # Serde Data Transfer Objects
-│   │       ├── mod.rs                     # Models export
-│   │       ├── datasets.rs                # Upload and Preprocessing DTOs
-│   │       ├── routing.rs                 # Configuration and Task DTOs
-│   │       ├── execution.rs               # Execution request and metrics DTOs
-│   │       ├── comparison.rs              # Leaderboard and ranking DTOs
-│   │       ├── ingested_model.rs          # Model file ingestion DTOs
-│   │       └── error.rs                   # StandardErrorResponse contract
-│   └── tests/                             # Comprehensive Integration Test Suite
-│       ├── execution_tests.rs             # Metrics, PCA, MLP, CNN, Ingestion tests
-│       ├── ingestion_tests.rs             # CSV parsing, limits, imputation tests
-│       ├── routing_tests.rs               # Task boundary and conflict tests
-│       └── unified_pipeline_tests.rs      # State isolation & RAM purge tests
+│   │   │       ├── algorithms.rs    # Supervised models, K-Means, PCA, splits
+│   │   │       ├── nn.rs            # MLP and 1D CNN
+│   │   │       └── metrics.rs       # Classification, regression and clustering metrics
+│   │   └── models/                  # Request/response types (datasets, routing,
+│   │                                #   execution, comparison, evaluation, errors)
+│   └── tests/                       # Integration tests of the public API
 │
-├── frontend/                              # Modern React 18 + TypeScript Client
-│   ├── index.html                         # Typography (Playfair Display) & texture
-│   ├── vite.config.mjs                    # Vite bundler configuration
+├── frontend/
+│   ├── index.html
 │   └── src/
-│       ├── index.tsx                      # DOM mount point
-│       ├── App.tsx                        # Master workflow coordinator
-│       ├── components/
-│       │   ├── Navbar.tsx                 # Parchment navbar with diamond logo
-│       │   ├── Hero.tsx                   # Decorative bracketed headline & action cards
-│       │   ├── InfoTooltip.tsx            # Subtle interactive ⓘ explanation popovers
-│       │   ├── SimpleEvaluateModelView.tsx# Student-friendly 2-input evaluation view
-│       │   ├── GpuAccelerationPanel.tsx   # WebGPU diagnostics & VRAM benchmark
-│       │   ├── DatasetIngestionView.tsx   # Step 1: Upload, preview, clean
-│       │   ├── TaskConfigurationView.tsx  # Step 2: Problem type, targets, hyperparameters
-│       │   └── EvaluationDashboardView.tsx# Step 3 & 4: Metrics, confusion matrix, leaderboard
+│       ├── index.tsx, App.tsx       # Entry point and workflow coordinator
+│       ├── engine/
+│       │   ├── engine.worker.ts     # Loads the WebAssembly engine; routes messages
+│       │   ├── client.ts            # Promise-based calls to the worker; EngineError
+│       │   ├── onnx.ts              # ONNX Runtime Web: load and run uploaded models
+│       │   ├── protocol.ts          # Worker message types
+│       │   └── pkg/                 # Generated by `npm run build:engine` (not committed)
 │       ├── services/
-│       │   ├── api.ts                     # REST client connecting to backend (:8080)
-│       │   └── webgpu.ts                  # WebGPU device probe & WGSL compute shaders
-│       └── styles/
-│           └── theme.css                  # Parchment color variables & tactile paper texture
+│       │   ├── api.ts               # App-facing engine client (same method names as before)
+│       │   └── webgpu.ts            # Device info and the GPU vs CPU benchmark
+│       ├── components/              # Navbar, Hero, Your Device panel, Steps 1-4, Evaluate screen
+│       └── styles/theme.css
 │
-├── documents/                             # Consolidated Team Documentation
-│   └── Team13_Consolidated_Documentation.pdf # All 4 specifications merged into 1 PDF (41 pages)
-├── scripts/                               # Development helpers
-│   └── cargo-runner.js                    # Auto-resolves cargo path across operating systems
-├── Cargo.toml                             # Root workspace manifest
-└── package.json                           # Root scripts for testing, running, and building
+├── scripts/engine.mjs               # `build` (wasm + bindings) and `test` (cargo test)
+├── .github/workflows/
+│   ├── ci.yml                       # Engine tests + WebAssembly/frontend build
+│   └── cd.yml                       # Static bundle → artifact + GitHub Pages
+├── contracts/fixtures/              # Sample CSVs (classification, regression)
+├── documents/                       # Team specifications (PDF)
+├── vite.config.mjs                  # Relative paths, ES-module worker
+├── Cargo.toml                       # Workspace (size-optimised release profile)
+└── package.json                     # npm scripts
 ```
 
 ---
 
-## 8. Testing & Verification
+## 8. Testing & CI
 
-The project is backed by **111 automated backend tests** and full TypeScript type verification.
-
-### Run All Backend Tests
 ```bash
-npm test
+npm test               # engine tests (cargo test --workspace): 133 tests
+npm run build:engine   # compile the engine to WebAssembly + generate bindings
+npm run typecheck      # tsc --noEmit (needs the engine built first)
+npm run build          # build:engine + production bundle in dist/
 ```
-*Output: All 111 unit and integration tests pass in $<0.15\text{s}$ with zero failures.*
 
-### Run Frontend Typecheck
-```bash
-npm run typecheck
-```
-*Output: `tsc --noEmit` completes with 0 errors.*
+The engine is plain Rust, so its tests run natively; the same code is what runs in the browser.
 
-### Run Production Build
-```bash
-npm run build
-```
-*Output: Vite transforms, bundles, and minifies client in $<300\text{ms}$ into `dist/`.*
+**CI** (`.github/workflows/ci.yml`, on pushes to `main`, `issue-**`, `feat/**` and on pull requests):
+- **Engine:** `cargo check` (native and `wasm32`), `cargo test`, rustfmt and clippy (non-blocking).
+- **Web bundle:** builds the WebAssembly engine, typechecks and builds the site.
 
 ---
 
-## 9. Getting Started & Quick Start
+## 9. Getting Started
+
+To *use* ML Lab, just open the [live site](https://web-based-ml-model-evaluator.github.io/Web-Based-ML-Model-Evaluator/). To develop it locally:
 
 ### Prerequisites
-- [Rust](https://rustup.rs/) (version `1.80+`)
-- [Node.js](https://nodejs.org/) (version `18+` or `20+`)
+- [Rust](https://rustup.rs/) (stable) with the WebAssembly target:
+  ```bash
+  rustup target add wasm32-unknown-unknown
+  ```
+- `wasm-bindgen-cli` at **exactly** the crate's version:
+  ```bash
+  cargo install wasm-bindgen-cli --version 0.2.130 --locked
+  ```
+- [Node.js](https://nodejs.org/) 20+
 
-### 1. Clone & Install
+### Run it
 ```bash
 git clone https://github.com/Web-Based-ML-Model-Evaluator/Web-Based-ML-Model-Evaluator.git
 cd Web-Based-ML-Model-Evaluator
 npm install
+npm run build:engine   # re-run after changing anything in engine/
+npm run dev            # http://localhost:3000
 ```
 
-### 2. Start the Backend Server
-```bash
-npm run start:backend
-```
-*The unified Rust backend starts on `http://localhost:8080` (health endpoint: `http://localhost:8080/health`).*
+There is no backend to start. To test the production bundle: `npm run build`, then `npx vite preview` (http://localhost:4173).
 
-### 3. Start the Frontend Client
-In a separate terminal window:
-```bash
-npm run dev
-```
-*Open your browser at `http://localhost:3000` to interact with ML Lab.*
+> **Windows with Smart App Control:** SAC blocks the build scripts that Cargo compiles, so Rust builds fail with *"An Application Control policy has blocked this file"*. Build the engine from **WSL** (install Rust and `build-essential` there) and run the npm commands as usual.
+
+Sample data for trying it out: `contracts/fixtures/sample_classification.csv` and `contracts/fixtures/sample_regression.csv`.
 
 ---
 
-## 10. Consolidated Documentation
+## 10. Deployment
 
-All team design documents, specifications, and architecture diagrams have been consolidated into a single bookmarked PDF:
-- **Location:** [`documents/Team13_Consolidated_Documentation.pdf`](file:///c:/B.Tech/Fifth_sem/SE/ite1/documents/Team13_Consolidated_Documentation.pdf)
-- **Included Sections:**
-  1. *Functional Requirements Specification (FR 1 to FR 13)*
+The site is a static bundle, so any static host works.
+
+- **GitHub Pages (automatic):** `.github/workflows/cd.yml` runs on every push to `main`. It builds the engine and frontend, uploads `dist/` as a downloadable artifact (`web-ml-static-site`) and deploys it to GitHub Pages. One-time setup: **Settings → Pages → Source: GitHub Actions**.
+- **Any other host:** run `npm run build` (or download the CD artifact) and upload the contents of `dist/`. Assets use relative paths, so the site works from a sub-path. The host must serve `.wasm` files with the `application/wasm` MIME type (most do).
+- **Multi-threading (optional):** static hosts like GitHub Pages can't send the cross-origin isolation headers that multi-threaded WebAssembly needs, so the engine runs single-threaded. On a host that sends `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp`, ONNX Runtime uses multiple threads automatically.
+
+---
+
+## 11. Browser Requirements
+
+| Feature | Needed for | Support |
+| :--- | :--- | :--- |
+| WebAssembly + module Web Workers | Everything | All current Chrome, Edge, Firefox and Safari |
+| WebGPU | Running ONNX models on the GPU, the GPU benchmark | Chrome / Edge 113+ (desktop); other browsers fall back to the CPU |
+
+The app downloads about 0.3 MB (gzipped) for the engine. ONNX Runtime (about 7 MB gzipped) is downloaded only the first time a model is uploaded.
+
+---
+
+## 12. Consolidated Documentation
+
+All team design documents and specifications are consolidated into a single bookmarked PDF:
+- **Location:** [`documents/Team13_Consolidated_Documentation.pdf`](documents/Team13_Consolidated_Documentation.pdf)
+- **Included sections:**
+  1. *Functional Requirements Specification (FR-1 to FR-13)*
   2. *Software Requirements Specification (SRS Team 13)*
   3. *Software Architecture & System Design (Team 13 SASD)*
   4. *Software Test Plan & Quality Assurance (Test Plan Team 13)*
 
+These documents describe the original server-based design; the architecture above reflects the current on-device implementation.
+
 ---
 
-*Authored by Team 13 — Web-Based ML Model Evaluator.*
+*Team 13 — Web-Based ML Model Evaluator.*
