@@ -1,22 +1,39 @@
-name: CD Release Pipeline
+name: CD - Deploy static site
 
+# The site is static: the server only delivers the files. All computation runs in the
+# visitor's browser (WebAssembly engine + WebGPU), so any static host works.
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  build-release:
-    name: Build & Package Production Artifacts
+  build:
+    name: Build static bundle
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-bindgen CLI (must match the crate version)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.130
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -24,27 +41,30 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies & Build frontend
+      - name: Build engine (WebAssembly) and site
         run: |
           npm ci
           npm run build
 
-      - name: Build release binary for unified backend
-        run: cargo build --release --workspace
-
-      - name: Verify release binary
-        run: ls -la target/release/web_ml_backend*
-
-      - name: Upload Unified Backend release artifact
+      - name: Upload bundle (downloadable, for any static host)
         uses: actions/upload-artifact@v4
         with:
-          name: web-ml-backend-linux
-          path: target/release/web_ml_backend
-          retention-days: 14
-
-      - name: Upload Production Frontend bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: web-ml-frontend-dist
+          name: web-ml-static-site
           path: dist/
           retention-days: 14
+
+      - name: Upload bundle for GitHub Pages
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/
+
+  deploy:
+    name: Deploy to GitHub Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
