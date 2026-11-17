@@ -21,9 +21,11 @@ use crate::core::validator::{
     sanitize_filename, validate_cleaned_dataset, validate_csv_upload, validate_dataset_size,
 };
 use crate::models::{
-    CleanedDatasetDTO, DatasetUploadResponse, ExecutionRequest, ExecutionResponse, MetricResults,
-    ModelComparisonEntry, PipelineDispatchResponse, PreprocessingRequest, PreprocessingResponse,
-    StandardErrorResponse, TaskConfiguration, TaskSupportInfo, TaskType, ValidationResult,
+    CleanedDatasetDTO, DatasetUploadResponse, ExecutionRequest, ExecutionResponse,
+    ExternalEvaluation, ExternalPredictions, MetricResults, ModelComparisonEntry, ModelInputs,
+    ModelInputsRequest, PipelineDispatchResponse, PredictionKind, PreprocessingRequest,
+    PreprocessingResponse, StandardErrorResponse, TaskConfiguration, TaskSupportInfo, TaskType,
+    ValidationResult,
 };
 use chrono::Utc;
 use serde::de::DeserializeOwned;
@@ -472,6 +474,150 @@ impl Session {
         })
     }
 
+    // ------------------------------------------------------------------
+    // Uploaded models (ONNX), run by the browser on this device (#46)
+    // ------------------------------------------------------------------
+
+    /// Feature matrix to feed an uploaded model, from the selected dataset columns.
+    pub fn model_inputs(&self, req: &ModelInputsRequest) -> EngineResult<ModelInputs> {
+        let records = self.dataset_records(&req.dataset_id)?;
+        let features = build_feature_matrix(&records, &req.feature_columns)?;
+        let classes = match req.task_type.to_lowercase().as_str() {
+            "classification" => sorted_classes(&label_column(&records, &req.target_column)?),
+            "regression" => {
+                // Validate the target now so problems show before the model runs
+                numeric_column(&records, &req.target_column)?;
+                vec![]
+            }
+            other => {
+                return Err(err(
+                    "UNSUPPORTED_TASK_TYPE",
+                    format!(
+                        "Uploaded models can be evaluated for classification or regression, not '{}'.",
+                        other
+                    ),
+                ));
+            }
+        };
+        Ok(ModelInputs {
+            rows: features.len(),
+            feature_columns: req.feature_columns.clone(),
+            features,
+            classes,
+        })
+    }
+
+    /// Scores an uploaded model's predictions against the dataset's own target column
+    /// (FR-9, FR-10) and adds the run to the leaderboard (FR-12).
+    pub fn record_external_predictions(
+        &mut self,
+        req: ExternalPredictions,
+    ) -> EngineResult<ExternalEvaluation> {
+        let records = self.dataset_records(&req.dataset_id)?;
+        if req.predictions.len() != records.len() {
+            return Err(err(
+                "PREDICTION_COUNT_MISMATCH",
+                format!(
+                    "The model returned {} predictions for {} rows.",
+                    req.predictions.len(),
+                    records.len()
+                ),
+            ));
+        }
+        let execution_id = format!("onnx-{}", Uuid::new_v4());
+        let inference_ms = (req.inference_ms.max(0.0) * 100.0).round() / 100.0;
+        let entry = |task: &str, metric: &str, value: f64, summary: HashMap<String, f64>| {
+            ModelComparisonEntry {
+                execution_id: execution_id.clone(),
+                dataset_id: req.dataset_id.clone(),
+                task_type: task.to_string(),
+                algorithm: req.model_name.clone(),
+                executed_at: Utc::now(),
+                train_time_ms: inference_ms,
+                primary_metric_name: metric.to_string(),
+                primary_metric_value: value,
+                summary_metrics: summary,
+            }
+        };
+
+        let (metrics, comparison_entry, class_mapping) = match req.task_type.to_lowercase().as_str()
+        {
+            "classification" => {
+                let truth = label_column(&records, &req.target_column)?;
+                let (predicted, mapping) =
+                    predictions_as_labels(&req.predictions, req.kind, &sorted_classes(&truth))?;
+                let m = compute_classification_metrics(&truth, &predicted);
+                let summary = HashMap::from([
+                    ("accuracy".to_string(), m.accuracy),
+                    ("precision".to_string(), m.precision),
+                    ("recall".to_string(), m.recall),
+                    ("f1_score".to_string(), m.f1_score),
+                ]);
+                let e = entry("Classification", "Accuracy", m.accuracy, summary);
+                (MetricResults::Classification(m), e, mapping)
+            }
+            "regression" => {
+                let truth = numeric_column(&records, &req.target_column)?;
+                let predicted = req
+                    .predictions
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| {
+                        p.as_f64().filter(|v| v.is_finite()).ok_or_else(|| {
+                            err(
+                                "INVALID_PREDICTION",
+                                format!("Prediction {} is not a finite number.", i + 1),
+                            )
+                        })
+                    })
+                    .collect::<EngineResult<Vec<f64>>>()?;
+                let m = compute_regression_metrics(&truth, &predicted);
+                let summary = HashMap::from([
+                    ("mae".to_string(), m.mean_absolute_error),
+                    ("mse".to_string(), m.mean_squared_error),
+                    ("rmse".to_string(), m.root_mean_squared_error),
+                    ("r2".to_string(), m.r2_score),
+                ]);
+                let e = entry("Regression", "R2 Score", m.r2_score, summary);
+                (MetricResults::Regression(m), e, None)
+            }
+            other => {
+                return Err(err(
+                    "UNSUPPORTED_TASK_TYPE",
+                    format!(
+                        "Task type '{}' is not supported for uploaded models.",
+                        other
+                    ),
+                ));
+            }
+        };
+
+        self.comparison_store.record_run(comparison_entry.clone());
+        Ok(ExternalEvaluation {
+            execution: ExecutionResponse {
+                execution_id,
+                dataset_id: req.dataset_id,
+                task_type: req.task_type,
+                algorithm: req.model_name,
+                train_time_ms: inference_ms,
+                train_samples: 0,
+                test_samples: records.len(),
+                metrics,
+                comparison_entry,
+            },
+            class_mapping,
+        })
+    }
+
+    fn dataset_records(&self, dataset_id: &str) -> EngineResult<Vec<Value>> {
+        Ok(self
+            .cleaned_data(dataset_id)?
+            .records
+            .into_iter()
+            .map(|rec| serde_json::to_value(rec).unwrap_or_default())
+            .collect())
+    }
+
     /// Runs executed in this session for one dataset; "all" or "" lists every run (FR-12).
     pub fn comparison_history(&self, dataset_id: &str) -> Value {
         let runs = self.comparison_store.get_history(dataset_id);
@@ -534,6 +680,10 @@ impl Session {
             "compare_models" => {
                 let ids: Vec<String> = arg(&args, "execution_ids")?;
                 to_json(self.compare_models(&ids)?)
+            }
+            "model_inputs" => to_json(self.model_inputs(&parse(args)?)?),
+            "record_external_predictions" => {
+                to_json(self.record_external_predictions(parse(args)?)?)
             }
             other => Err(err(
                 "UNKNOWN_METHOD",
@@ -633,6 +783,93 @@ fn label_column(records: &[Value], target: &str) -> EngineResult<Vec<String>> {
             )),
         })
         .collect()
+}
+
+/// Reads the target column as numbers (regression).
+fn numeric_column(records: &[Value], target: &str) -> EngineResult<Vec<f64>> {
+    records
+        .iter()
+        .enumerate()
+        .map(|(i, r)| numeric_cell(r, target, i))
+        .collect()
+}
+
+/// Distinct labels in sorted order (the order label encoders such as scikit-learn's use).
+fn sorted_classes(labels: &[String]) -> Vec<String> {
+    let mut classes = labels.to_vec();
+    classes.sort();
+    classes.dedup();
+    classes
+}
+
+/// Turns raw model outputs into labels comparable with the dataset's target column.
+///
+/// Text outputs are used as-is. Numbers are matched to numeric labels by value, or, when
+/// the labels are text, read as positions in the sorted class list; that second case is
+/// reported back so the user can see how outputs were interpreted.
+fn predictions_as_labels(
+    predictions: &[Value],
+    kind: PredictionKind,
+    classes: &[String],
+) -> EngineResult<(Vec<String>, Option<String>)> {
+    let numeric_classes: Option<Vec<(f64, &String)>> = classes
+        .iter()
+        .map(|c| c.trim().parse::<f64>().ok().map(|v| (v, c)))
+        .collect();
+    let by_index = kind == PredictionKind::ClassIndex || numeric_classes.is_none();
+    let mut used_index = false;
+
+    let labels = predictions
+        .iter()
+        .enumerate()
+        .map(|(i, p)| match p {
+            Value::String(s) => Ok(s.clone()),
+            Value::Bool(b) => Ok(b.to_string()),
+            Value::Number(n) => {
+                let v = n.as_f64().unwrap_or(f64::NAN);
+                if by_index {
+                    used_index = true;
+                    let idx = v as usize;
+                    if v.fract() != 0.0 || v < 0.0 || idx >= classes.len() {
+                        return Err(err(
+                            "INVALID_PREDICTION",
+                            format!(
+                                "Prediction {} is class number {}, but the target column has {} classes.",
+                                i + 1,
+                                v,
+                                classes.len()
+                            ),
+                        ));
+                    }
+                    Ok(classes[idx].clone())
+                } else {
+                    // Numeric labels: match by value; an unknown value simply counts as wrong
+                    let matched = numeric_classes
+                        .as_ref()
+                        .and_then(|nc| nc.iter().find(|(c, _)| (c - v).abs() < 1e-9))
+                        .map(|(_, label)| (*label).clone());
+                    Ok(matched.unwrap_or_else(|| v.to_string()))
+                }
+            }
+            _ => Err(err(
+                "INVALID_PREDICTION",
+                format!("Prediction {} is not a label or a number.", i + 1),
+            )),
+        })
+        .collect::<EngineResult<Vec<String>>>()?;
+
+    let mapping = used_index.then(|| {
+        let pairs: Vec<String> = classes
+            .iter()
+            .enumerate()
+            .map(|(i, c)| format!("{} = {}", i, c))
+            .collect();
+        format!(
+            "The model outputs class numbers; they were matched to the target's labels in sorted order: {}.",
+            pairs.join(", ")
+        )
+    });
+    Ok((labels, mapping))
 }
 
 fn required_target(target: &Option<String>) -> EngineResult<&str> {
@@ -909,5 +1146,110 @@ mod tests {
                 .code,
             "MISSING_FILE"
         );
+    }
+
+    // ---- uploaded (ONNX) models: inputs and scoring (#46) ----
+
+    fn predictions(
+        dataset_id: &str,
+        task: &str,
+        target: &str,
+        preds: Vec<Value>,
+    ) -> ExternalPredictions {
+        ExternalPredictions {
+            dataset_id: dataset_id.to_string(),
+            model_name: "Uploaded ONNX: model.onnx".to_string(),
+            task_type: task.to_string(),
+            target_column: target.to_string(),
+            predictions: preds,
+            kind: PredictionKind::Label,
+            inference_ms: 3.5,
+        }
+    }
+
+    #[test]
+    fn model_inputs_give_features_and_sorted_classes() {
+        let (s, id) = session_with(&two_class_csv());
+        let inputs = s
+            .model_inputs(&ModelInputsRequest {
+                dataset_id: id,
+                task_type: "classification".to_string(),
+                target_column: "label".to_string(),
+                feature_columns: vec!["y".to_string(), "x".to_string()],
+            })
+            .unwrap();
+        assert_eq!(inputs.rows, 20);
+        assert_eq!(inputs.features[3], vec![6.0, 3.0]);
+        assert_eq!(inputs.classes, vec!["a", "b"]);
+    }
+
+    #[test]
+    fn model_predictions_are_scored_against_the_dataset() {
+        let (mut s, id) = session_with(&two_class_csv());
+        // Correct except the first row
+        let preds: Vec<Value> = (0..20)
+            .map(|i| json!(if (i % 2 == 0) == (i != 0) { "a" } else { "b" }))
+            .collect();
+        let res = s
+            .record_external_predictions(predictions(&id, "classification", "label", preds))
+            .unwrap();
+        match &res.execution.metrics {
+            MetricResults::Classification(m) => assert!((m.accuracy - 0.95).abs() < 1e-9),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(res.class_mapping.is_none());
+        assert_eq!(
+            s.comparison_history(&res.execution.dataset_id)["total_runs"],
+            1
+        );
+    }
+
+    #[test]
+    fn class_numbers_map_to_sorted_text_labels_and_are_reported() {
+        let (mut s, id) = session_with(&two_class_csv());
+        let preds: Vec<Value> = (0..20).map(|i| json!(i % 2)).collect();
+        let mut req = predictions(&id, "classification", "label", preds);
+        req.kind = PredictionKind::ClassIndex;
+        let res = s.record_external_predictions(req).unwrap();
+        match &res.execution.metrics {
+            MetricResults::Classification(m) => assert_eq!(m.accuracy, 1.0),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert!(res.class_mapping.unwrap().contains("0 = a, 1 = b"));
+    }
+
+    #[test]
+    fn out_of_range_class_numbers_and_wrong_counts_are_errors() {
+        let (mut s, id) = session_with(&two_class_csv());
+        let preds: Vec<Value> = (0..20).map(|_| json!(7)).collect();
+        let mut req = predictions(&id, "classification", "label", preds);
+        req.kind = PredictionKind::ClassIndex;
+        assert_eq!(
+            s.record_external_predictions(req).unwrap_err().error.code,
+            "INVALID_PREDICTION"
+        );
+        let req = predictions(&id, "classification", "label", vec![json!("a")]);
+        assert_eq!(
+            s.record_external_predictions(req).unwrap_err().error.code,
+            "PREDICTION_COUNT_MISMATCH"
+        );
+    }
+
+    #[test]
+    fn regression_predictions_are_scored() {
+        let (mut s, id) = session_with(&two_class_csv());
+        // y = 2x exactly
+        let preds: Vec<Value> = (0..20).map(|i| json!(i as f64 * 2.0)).collect();
+        let res = s
+            .record_external_predictions(predictions(&id, "regression", "y", preds))
+            .unwrap();
+        match &res.execution.metrics {
+            MetricResults::Regression(m) => {
+                assert!(m.mean_absolute_error < 1e-9);
+                assert!((m.r2_score - 1.0).abs() < 1e-9);
+            }
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(res.execution.train_time_ms, 3.5);
     }
 }

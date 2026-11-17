@@ -213,29 +213,4 @@ mod tests {
         let cnn_reg_preds = try_run_regression_model("Convolutional Neural Network (CNN)", &x_train, &y_train_reg, &x_test).unwrap();
         assert_eq!(cnn_reg_preds.len(), 2);
     }
-
-    #[test]
-    fn test_model_file_ingestion_formats() {
-        let supported_formats = [
-            ("model.pt", "PyTorch (.pt)"),
-            ("model.pth", "PyTorch (.pt)"),
-            ("pipeline.joblib", "Joblib (.joblib)"),
-            ("clf.pkl", "Pickle (.pkl)"),
-            ("network.h5", "HDF5/Keras (.h5)"),
-            ("graph.onnx", "ONNX (.onnx)"),
-            ("weights.json", "JSON Model (.json)"),
-        ];
-
-        for (filename, _expected_format) in supported_formats {
-            let lower = filename.to_lowercase();
-            let is_valid = lower.ends_with(".pt")
-                || lower.ends_with(".pth")
-                || lower.ends_with(".joblib")
-                || lower.ends_with(".pkl")
-                || lower.ends_with(".h5")
-                || lower.ends_with(".onnx")
-                || lower.ends_with(".json");
-            assert!(is_valid, "{filename} should be accepted");
-        }
-    }
 }

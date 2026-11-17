@@ -126,27 +126,67 @@ export const ApiClient = {
     return callEngine('purge_session');
   },
 
-  // Uploaded model files: no on-device runtime yet (#46), so these never return results.
-  async uploadModel(_file: File, _taskType = 'classification', _architecture = ''): Promise<any> {
-    throw new EngineError({
-      code: 'MODEL_EXECUTION_UNAVAILABLE',
-      message: 'Evaluating uploaded model files is not available yet. Train a built-in model instead.',
-    });
+  // Uploaded models (#46): ONNX files run on this device with ONNX Runtime Web
+  // (on the GPU via WebGPU when available, otherwise on the CPU via WebAssembly).
+
+  /** Loads an .onnx model into the engine worker; other formats are rejected with advice. */
+  async uploadModel(file: File, taskType = 'classification'): Promise<UploadedModel> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return callEngine('load_model', { filename: file.name, task_type: taskType }, bytes);
   },
 
-  async listIngestedModels(): Promise<any[]> {
-    return [];
+  listIngestedModels(): Promise<UploadedModel[]> {
+    return callEngine('list_models');
   },
 
+  /**
+   * Runs the model on the dataset's feature columns and scores its predictions against the
+   * target column. Every row of the dataset is used as test data.
+   */
   async evaluateIngestedModel(
-    _modelId: string,
-    _datasetId: string,
-    _targetColumn?: string,
-    _featureColumns: string[] = [],
+    modelId: string,
+    datasetId: string,
+    targetColumn: string,
+    featureColumns: string[],
   ): Promise<any> {
-    throw new EngineError({
-      code: 'MODEL_EXECUTION_UNAVAILABLE',
-      message: 'Evaluating uploaded model files is not available yet. Train a built-in model instead.',
+    const result: any = await callEngine('evaluate_model', {
+      model_id: modelId,
+      dataset_id: datasetId,
+      target_column: targetColumn,
+      feature_columns: featureColumns,
     });
+    return toTaggedMetrics(result);
   },
 };
+
+export interface UploadedModel {
+  model_id: string;
+  filename: string;
+  file_format: string;
+  file_size_bytes: number;
+  task_type: 'classification' | 'regression';
+  input_name: string;
+  input_shape: Array<number | null> | null;
+  output_names: string[];
+  execution_provider: 'webgpu' | 'wasm';
+}
+
+/**
+ * The evaluation views read `metrics.Classification` / `metrics.Regression` and a
+ * `{ labels, matrix }` confusion matrix; the engine returns flat metrics.
+ */
+function toTaggedMetrics(result: any): any {
+  const m = result?.metrics ?? {};
+  if (Array.isArray(m.confusion_matrix)) {
+    return {
+      ...result,
+      metrics: {
+        Classification: { ...m, confusion_matrix: { labels: m.class_labels ?? [], matrix: m.confusion_matrix } },
+      },
+    };
+  }
+  if (typeof m.r2_score === 'number') {
+    return { ...result, metrics: { Regression: m } };
+  }
+  return result;
+}

@@ -25,6 +25,8 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
   // Filled from the test CSV the user uploads; there is no built-in sample data
   const [targetColumn, setTargetColumn] = useState<string>('');
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  // Numeric columns are the model's inputs (in file order)
+  const [numericColumns, setNumericColumns] = useState<string[]>([]);
   const [isUploadingDataset, setIsUploadingDataset] = useState(false);
 
   // Evaluation & Results State
@@ -76,6 +78,11 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
       setActiveTestDatasetId(uploadRes.dataset_id);
       if (uploadRes.column_names && uploadRes.column_names.length > 0) {
         setAvailableColumns(uploadRes.column_names);
+        setNumericColumns(
+          uploadRes.column_summaries
+            .filter((c) => String(c.inferred_type).toLowerCase() === 'numeric')
+            .map((c) => c.name),
+        );
         // Default target column to last column
         setTargetColumn(uploadRes.column_names[uploadRes.column_names.length - 1]);
       }
@@ -93,19 +100,25 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
 
     try {
       // Both inputs are required: results only ever come from the user's own model and data
-      const modelIdToUse = uploadedModel?.model_id;
+      let modelIdToUse = uploadedModel?.model_id;
       if (!modelIdToUse) {
         throw new Error('Upload your trained model file first.');
       }
       if (!activeTestDatasetId || !targetColumn) {
         throw new Error('Upload a test CSV and choose its target column first.');
       }
+      // The task type was switched after the model was loaded: load it again for that task
+      if (uploadedModel.task_type !== taskType && modelFile) {
+        const reloaded = await ApiClient.uploadModel(modelFile, taskType);
+        setUploadedModel(reloaded);
+        modelIdToUse = reloaded.model_id;
+      }
 
       const res = await ApiClient.evaluateIngestedModel(
         modelIdToUse,
         activeTestDatasetId,
         targetColumn,
-        availableColumns.filter((c) => c !== targetColumn)
+        numericColumns.filter((c) => c !== targetColumn)
       );
       setEvaluationResult(res);
     } catch (err: any) {
@@ -223,7 +236,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
               Your Model File
               <InfoTooltip
                 title="Model File"
-                content="Upload your trained model weights. Supports PyTorch (.pt, .pth), Scikit-Learn (.joblib, .pkl), Keras (.h5), or ONNX (.onnx)."
+                content="Upload your trained model as an ONNX file (.onnx). It runs on this device: on your GPU via WebGPU when available, otherwise on the CPU. Export PyTorch, scikit-learn or Keras models with torch.onnx.export, skl2onnx or tf2onnx."
               />
             </h3>
           </div>
@@ -250,7 +263,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
           >
             <input
               type="file"
-              accept=".pt,.pth,.joblib,.pkl,.pickle,.h5,.hdf5,.onnx,.json"
+              accept=".onnx"
               onChange={handleModelFileChange}
               style={{ display: 'none' }}
             />
@@ -265,7 +278,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
                 : 'Click to Choose Model File'}
             </span>
             <span style={{ fontSize: '11px', color: '#8A7D71', marginTop: '4px' }}>
-              .pt, .joblib, .pkl, .h5, .onnx, or .json
+              ONNX model file (.onnx)
             </span>
           </label>
 
@@ -372,7 +385,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
           </div>
 
           <p style={{ margin: '0 0 16px', fontSize: '13px', color: '#8A7D71' }}>
-            Upload a test CSV or test with sample evaluation data:
+            Upload a test CSV with the same feature columns the model was trained on:
           </p>
 
           {/* Test File Input Box */}
@@ -529,8 +542,13 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
               </h3>
               <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#8A7D71' }}>
                 Evaluated on <strong>{evaluationResult.test_samples}</strong> test rows in{' '}
-                <strong>{evaluationResult.train_time_ms} ms</strong>.
+                <strong>{evaluationResult.train_time_ms} ms</strong> on this device ({evaluationResult.device}).
               </p>
+              {evaluationResult.class_mapping && (
+                <p style={{ margin: '6px 0 0', fontSize: '12px', color: '#73675E' }}>
+                  {evaluationResult.class_mapping}
+                </p>
+              )}
             </div>
 
             {onViewLeaderboard && (

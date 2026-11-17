@@ -170,11 +170,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   const [ingestedModels, setIngestedModels] = useState<any[]>([]);
   const [modelFile, setModelFile] = useState<File | null>(null);
   const [ingestTaskType, setIngestTaskType] = useState<string>('classification');
-  const [ingestArch, setIngestArch] = useState<string>('');
+  // Columns of the Step 1 dataset, used to pick the target and feed the model
+  const [schemaColumns, setSchemaColumns] = useState<string[]>([]);
+  const [schemaTypes, setSchemaTypes] = useState<Record<string, string>>({});
+  const [ingestTarget, setIngestTarget] = useState<string>('');
   const [ingesting, setIngesting] = useState<boolean>(false);
   const [ingestSuccess, setIngestSuccess] = useState<string | null>(null);
   const [selectedModelId, setSelectedModelId] = useState<string>('');
-  const [testDatasetId, setTestDatasetId] = useState<string>(datasetId);
   const [evaluatingIngested, setEvaluatingIngested] = useState<boolean>(false);
   const [ingestedEvalResult, setIngestedEvalResult] = useState<any | null>(null);
 
@@ -189,19 +191,38 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== 'ingest' || !datasetId) return;
+    ApiClient.getSchema(datasetId)
+      .then((schema) => {
+        const columns: string[] = schema.columns ?? [];
+        setSchemaColumns(columns);
+        setSchemaTypes(schema.data_types ?? {});
+        setIngestTarget((current) => (columns.includes(current) ? current : columns[columns.length - 1] ?? ''));
+      })
+      .catch((err: any) => setError(err.message));
+  }, [activeTab, datasetId]);
+
+  // The model receives the dataset's other numeric columns, in file order
+  const ingestFeatures = schemaColumns.filter(
+    (c) => c !== ingestTarget && String(schemaTypes[c]).toLowerCase() === 'numeric',
+  );
+
   const handleUploadModel = async () => {
     if (!modelFile) {
-      setError('Please select a model file (.pt, .joblib, .pkl, .h5, .onnx) first.');
+      setError('Please select an ONNX model file (.onnx) first.');
       return;
     }
     setIngesting(true);
     setError(null);
     setIngestSuccess(null);
     try {
-      const res = await ApiClient.uploadModel(modelFile, ingestTaskType, ingestArch);
+      const res = await ApiClient.uploadModel(modelFile, ingestTaskType);
       setIngestedModels((prev) => [res, ...prev]);
       setSelectedModelId(res.model_id);
-      setIngestSuccess(`Model '${res.filename}' (${res.file_format}) ingested successfully.`);
+      setIngestSuccess(
+        `Model '${res.filename}' loaded on this device (${res.execution_provider === 'webgpu' ? 'GPU via WebGPU' : 'CPU via WebAssembly'}).`,
+      );
       setModelFile(null);
     } catch (err: any) {
       setError(`Model upload failed: ${err.message}`);
@@ -215,10 +236,14 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       setError('Please select an ingested model to evaluate.');
       return;
     }
+    if (!datasetId || !ingestTarget) {
+      setError('Upload a dataset in Step 1 and choose its target column first.');
+      return;
+    }
     setEvaluatingIngested(true);
     setError(null);
     try {
-      const res = await ApiClient.evaluateIngestedModel(selectedModelId, testDatasetId);
+      const res = await ApiClient.evaluateIngestedModel(selectedModelId, datasetId, ingestTarget, ingestFeatures);
       setIngestedEvalResult(res);
       if (res.comparison_entry) {
         setComparisonRuns((prev) => [res.comparison_entry, ...prev]);
@@ -410,7 +435,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               color: activeTab === 'ingest' ? '#1d4ed8' : '#475569',
             }}
           >
-            Ingest & Evaluate Model (.pt, .joblib, .pkl, .h5, .onnx)
+            Ingest & Evaluate Model (.onnx)
           </button>
         </div>
       </header>
@@ -1587,10 +1612,9 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
               1. Ingest Pre-Trained Model File (Issue #19 / FR-8)
             </h3>
             <p style={{ margin: '0 0 20px', fontSize: '14px', color: '#64748b' }}>
-              Upload your pre-trained model weights. Supported formats include:{' '}
-              <strong>PyTorch (.pt, .pth)</strong>, <strong>Joblib (.joblib)</strong>,{' '}
-              <strong>Pickle (.pkl)</strong>, <strong>Keras / HDF5 (.h5)</strong>, and{' '}
-              <strong>ONNX (.onnx)</strong>.
+              Upload a trained model in <strong>ONNX (.onnx)</strong> format. It runs on this device with ONNX
+              Runtime: on your GPU via WebGPU when the browser supports it, otherwise on the CPU. PyTorch,
+              scikit-learn and Keras models can be exported to ONNX (torch.onnx.export, skl2onnx, tf2onnx).
             </p>
 
             <div
@@ -1615,7 +1639,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 </label>
                 <input
                   type="file"
-                  accept=".pt,.pth,.joblib,.pkl,.pickle,.h5,.hdf5,.onnx,.json"
+                  accept=".onnx"
                   onChange={(e) => setModelFile(e.target.files?.[0] || null)}
                   style={{
                     display: 'block',
@@ -1657,32 +1681,6 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 </select>
               </div>
 
-              <div>
-                <label
-                  style={{
-                    display: 'block',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    color: '#334155',
-                    marginBottom: '6px',
-                  }}
-                >
-                  Architecture / Notes (Optional)
-                </label>
-                <input
-                  type="text"
-                  placeholder="e.g. ResNet-18, RandomForest, MLP"
-                  value={ingestArch}
-                  onChange={(e) => setIngestArch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: '1px solid #cbd5e1',
-                    fontSize: '13px',
-                  }}
-                />
-              </div>
 
               <div>
                 <button
@@ -1778,21 +1776,34 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                     marginBottom: '6px',
                   }}
                 >
-                  Test Dataset ID
+                  Target Column (Step 1 dataset)
                 </label>
-                <input
-                  type="text"
-                  value={testDatasetId}
-                  onChange={(e) => setTestDatasetId(e.target.value)}
-                  placeholder="e.g. dataset-001"
+                <select
+                  value={ingestTarget}
+                  onChange={(e) => setIngestTarget(e.target.value)}
+                  disabled={schemaColumns.length === 0}
                   style={{
                     width: '100%',
-                    padding: '8px 12px',
+                    padding: '9px 12px',
                     borderRadius: '6px',
                     border: '1px solid #cbd5e1',
                     fontSize: '13px',
+                    backgroundColor: '#ffffff',
                   }}
-                />
+                >
+                  {schemaColumns.length === 0 ? (
+                    <option value="">Upload a dataset in Step 1 first</option>
+                  ) : (
+                    schemaColumns.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))
+                  )}
+                </select>
+                <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
+                  Model input: {ingestFeatures.length ? ingestFeatures.join(', ') : 'no numeric columns'}
+                </div>
               </div>
 
               <div>
@@ -1836,8 +1847,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                     </h4>
                     <span style={{ fontSize: '13px', color: '#64748b' }}>
                       Evaluated on {ingestedEvalResult.test_samples} test samples in{' '}
-                      {ingestedEvalResult.train_time_ms} ms
+                      {ingestedEvalResult.train_time_ms} ms on this device ({ingestedEvalResult.device})
                     </span>
+                    {ingestedEvalResult.class_mapping && (
+                      <span style={{ display: 'block', fontSize: '12px', color: '#475569', marginTop: '4px' }}>
+                        {ingestedEvalResult.class_mapping}
+                      </span>
+                    )}
                   </div>
                   <button
                     type="button"
