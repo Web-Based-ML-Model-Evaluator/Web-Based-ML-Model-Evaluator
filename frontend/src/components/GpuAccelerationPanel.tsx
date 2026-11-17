@@ -1,28 +1,54 @@
-import React, { useState, useEffect } from 'react';
-import { probeGpuAcceleration, runGpuVramBenchmark, GpuDeviceInfo, GpuBenchmarkResult } from '../services/webgpu';
+import React, { useEffect, useState } from 'react';
+import { DeviceInfo, GpuBenchmarkResult, gpuLabel, probeDevice, runGpuBenchmark } from '../services/webgpu';
 import { InfoTooltip } from './InfoTooltip';
 
+const NOT_REPORTED = 'Not reported by this browser';
+
+const card: React.CSSProperties = {
+  padding: '12px',
+  borderRadius: '12px',
+  backgroundColor: '#FDFBF7',
+  border: '1px solid #ECE2D8',
+};
+const cardLabel: React.CSSProperties = {
+  fontSize: '11px',
+  color: '#887B70',
+  textTransform: 'uppercase',
+  fontWeight: 600,
+};
+const cardValue: React.CSSProperties = {
+  fontSize: '13px',
+  fontWeight: 700,
+  color: '#1C1917',
+  marginTop: '2px',
+  wordBreak: 'break-word',
+};
+
+/** The visitor's own device: everything shown here is read from the browser. */
 export const GpuAccelerationPanel: React.FC = () => {
-  const [gpuInfo, setGpuInfo] = useState<GpuDeviceInfo | null>(null);
-  const [benchmarkResult, setBenchmarkResult] = useState<GpuBenchmarkResult | null>(null);
+  const [info, setInfo] = useState<DeviceInfo | null>(null);
+  const [benchmark, setBenchmark] = useState<GpuBenchmarkResult | null>(null);
+  const [benchmarkError, setBenchmarkError] = useState<string | null>(null);
   const [benchmarking, setBenchmarking] = useState(false);
-  const [useGpu, setUseGpu] = useState(true);
 
   useEffect(() => {
-    probeGpuAcceleration().then(setGpuInfo);
+    probeDevice().then(setInfo);
   }, []);
 
   const handleRunBenchmark = async () => {
     setBenchmarking(true);
+    setBenchmark(null);
+    setBenchmarkError(null);
     try {
-      const res = await runGpuVramBenchmark();
-      setBenchmarkResult(res);
-    } catch (err) {
-      console.error(err);
+      setBenchmark(await runGpuBenchmark());
+    } catch (err: any) {
+      setBenchmarkError(err?.message ?? String(err));
     } finally {
       setBenchmarking(false);
     }
   };
+
+  const gpu = info?.webgpu;
 
   return (
     <div
@@ -37,55 +63,32 @@ export const GpuAccelerationPanel: React.FC = () => {
         boxShadow: '0 4px 16px rgba(0,0,0,0.03)',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '16px',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <div
-            style={{
-              width: '32px',
-              height: '32px',
-              borderRadius: '8px',
-              backgroundColor: '#EFF6FF',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: '#2563EB',
-            }}
-          >
-            ⚡
-          </div>
-          <div>
-            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1C1917', display: 'flex', alignItems: 'center' }}>
-              Hardware & VRAM Acceleration Engine
-              <InfoTooltip
-                title="GPU Acceleration"
-                content="Offloads machine learning computations to your GPU and dedicated VRAM using WebGPU shaders for ultra-fast training and inference."
-              />
-            </h3>
-            <p style={{ margin: 0, fontSize: '12px', color: '#73675E' }}>
-              Harnesses client GPU compute shaders & dedicated VRAM for real-time model training and metrics
-            </p>
-          </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '16px' }}>
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '8px',
+            backgroundColor: '#EFF6FF',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#2563EB',
+          }}
+        >
+          ⚡
         </div>
-
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label style={{ fontSize: '13px', fontWeight: 600, color: '#38302A', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '6px' }}>
-            <input
-              type="checkbox"
-              checked={useGpu}
-              onChange={(e) => setUseGpu(e.target.checked)}
-              style={{ accentColor: '#D45A1E', cursor: 'pointer' }}
+        <div>
+          <h3 style={{ margin: 0, fontSize: '16px', fontWeight: 700, color: '#1C1917', display: 'flex', alignItems: 'center' }}>
+            Your Device
+            <InfoTooltip
+              title="Runs on your device"
+              content="This site does all its work in your browser. Built-in models train on your CPU (WebAssembly); uploaded ONNX models run on your GPU through WebGPU when it is available. The values below are what your browser reports."
             />
-            WebGPU Accelerated
-          </label>
+          </h3>
+          <p style={{ margin: 0, fontSize: '12px', color: '#73675E' }}>
+            Your data and models stay in this browser tab; the server only delivered the app.
+          </p>
         </div>
       </div>
 
@@ -97,29 +100,37 @@ export const GpuAccelerationPanel: React.FC = () => {
           marginBottom: '16px',
         }}
       >
-        <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: '#FDFBF7', border: '1px solid #ECE2D8' }}>
-          <div style={{ fontSize: '11px', color: '#887B70', textTransform: 'uppercase', fontWeight: 600 }}>Active Device</div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#1C1917', marginTop: '2px', wordBreak: 'break-word' }}>
-            {gpuInfo?.adapterName || 'Detecting GPU...'}
+        <div style={card}>
+          <div style={cardLabel}>CPU threads</div>
+          <div style={cardValue}>{info ? (info.cpuThreads ?? NOT_REPORTED) : 'Detecting...'}</div>
+        </div>
+        <div style={card}>
+          <div style={cardLabel}>Memory (approx.)</div>
+          <div style={cardValue}>
+            {info ? (info.deviceMemoryGb != null ? `about ${info.deviceMemoryGb} GB` : NOT_REPORTED) : 'Detecting...'}
           </div>
         </div>
-
-        <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: '#FDFBF7', border: '1px solid #ECE2D8' }}>
-          <div style={{ fontSize: '11px', color: '#887B70', textTransform: 'uppercase', fontWeight: 600 }}>VRAM Allocation</div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#166534', marginTop: '2px' }}>
-            {gpuInfo?.vramEstimateMb ? `~${gpuInfo.vramEstimateMb} MB Available` : 'System Shared Memory'}
+        <div style={card}>
+          <div style={cardLabel}>GPU (WebGPU)</div>
+          <div style={{ ...cardValue, color: gpu?.supported ? '#166534' : '#73675E' }}>
+            {info ? (gpu?.supported ? gpuLabel(info) : 'Not available') : 'Detecting...'}
           </div>
+          {gpu && !gpu.supported && gpu.reason && (
+            <div style={{ fontSize: '11px', color: '#887B70', marginTop: '4px' }}>{gpu.reason}</div>
+          )}
         </div>
-
-        <div style={{ padding: '12px', borderRadius: '12px', backgroundColor: '#FDFBF7', border: '1px solid #ECE2D8' }}>
-          <div style={{ fontSize: '11px', color: '#887B70', textTransform: 'uppercase', fontWeight: 600 }}>Compute Pipeline</div>
-          <div style={{ fontSize: '13px', fontWeight: 700, color: '#D45A1E', marginTop: '2px' }}>
-            {gpuInfo?.backendType || 'WebGPU Compute Pipeline'}
+        <div style={card}>
+          <div style={cardLabel}>Largest GPU buffer</div>
+          <div style={cardValue}>
+            {gpu?.supported ? (gpu.maxBufferMb != null ? `${gpu.maxBufferMb} MB` : NOT_REPORTED) : '—'}
+          </div>
+          <div style={{ fontSize: '11px', color: '#887B70', marginTop: '4px' }}>
+            Browsers don't reveal total VRAM.
           </div>
         </div>
       </div>
 
-      {benchmarkResult && (
+      {benchmark && (
         <div
           style={{
             padding: '12px 16px',
@@ -129,24 +140,37 @@ export const GpuAccelerationPanel: React.FC = () => {
             fontSize: '12px',
             color: '#166534',
             marginBottom: '16px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: '8px',
           }}
         >
-          <div>
-            <strong>✓ Benchmark Complete:</strong> Processed 10,000 tensor vectors in <strong>{benchmarkResult.gpuExecutionTimeMs} ms</strong> on GPU ({benchmarkResult.speedupFactor}x faster than CPU).
-          </div>
-          <div>VRAM Buffer: <strong>{benchmarkResult.vramUsedMb} MB</strong></div>
+          <strong>Measured on this device:</strong> distances from {benchmark.points.toLocaleString()} points to{' '}
+          {benchmark.centers} centers ({benchmark.features} features) took <strong>{benchmark.gpuMs} ms</strong> on the GPU
+          (including copying results back) and <strong>{benchmark.cpuMs} ms</strong> in JavaScript on the CPU
+          {benchmark.gpuMs > 0 && <> ({(benchmark.cpuMs / benchmark.gpuMs).toFixed(1)}× ratio)</>}. Results agree to within{' '}
+          {benchmark.maxDifference.toExponential(1)}; GPU buffers used: {benchmark.gpuBufferMb} MB.
+        </div>
+      )}
+      {benchmarkError && (
+        <div
+          role="alert"
+          style={{
+            padding: '12px 16px',
+            borderRadius: '12px',
+            backgroundColor: '#F8FAFC',
+            border: '1px solid #E2E8F0',
+            fontSize: '12px',
+            color: '#475569',
+            marginBottom: '16px',
+          }}
+        >
+          {benchmarkError}
         </div>
       )}
 
       <button
         type="button"
         onClick={handleRunBenchmark}
-        disabled={benchmarking}
+        disabled={benchmarking || !gpu?.supported}
+        title={gpu?.supported ? undefined : 'Needs WebGPU'}
         style={{
           padding: '8px 18px',
           borderRadius: '8px',
@@ -155,13 +179,12 @@ export const GpuAccelerationPanel: React.FC = () => {
           color: '#D45A1E',
           fontWeight: 600,
           fontSize: '13px',
-          cursor: benchmarking ? 'not-allowed' : 'pointer',
-          transition: 'all 0.2s ease',
+          cursor: benchmarking || !gpu?.supported ? 'not-allowed' : 'pointer',
+          opacity: gpu?.supported ? 1 : 0.6,
         }}
       >
-        {benchmarking ? 'Running GPU Compute Shader...' : 'Run WebGPU Tensor Benchmark ⚡'}
+        {benchmarking ? 'Measuring GPU and CPU...' : 'Measure GPU vs CPU on this device'}
       </button>
     </div>
   );
 };
-

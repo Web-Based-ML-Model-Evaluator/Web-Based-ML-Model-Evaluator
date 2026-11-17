@@ -6,7 +6,7 @@ import { DatasetIngestionView } from './components/DatasetIngestionView';
 import { TaskConfigurationView } from './components/TaskConfigurationView';
 import { EvaluationDashboardView } from './components/EvaluationDashboardView';
 import { SimpleEvaluateModelView } from './components/SimpleEvaluateModelView';
-import { probeGpuAcceleration } from './services/webgpu';
+import { gpuLabel, probeDevice } from './services/webgpu';
 import { ApiClient } from './services/api';
 
 export type MainView = 'home' | 'train' | 'evaluate';
@@ -35,7 +35,7 @@ export const App: React.FC = () => {
 
   // Hardware Acceleration State
   const [gpuDeviceName, setGpuDeviceName] = useState<string>('Detecting GPU...');
-  const [isGpuActive, setIsGpuActive] = useState<boolean>(true);
+  const [isGpuActive, setIsGpuActive] = useState<boolean>(false);
 
   // Session & Dataset State
   const [sessionId] = useState<string>(() => `session-${Math.random().toString(36).substring(2, 9)}`);
@@ -57,9 +57,9 @@ export const App: React.FC = () => {
   });
 
   useEffect(() => {
-    probeGpuAcceleration().then((info) => {
-      setGpuDeviceName(info.adapterName);
-      setIsGpuActive(info.isSupported);
+    probeDevice().then((info) => {
+      setGpuDeviceName(gpuLabel(info));
+      setIsGpuActive(info.webgpu.supported);
     });
   }, []);
 
@@ -215,7 +215,7 @@ export const App: React.FC = () => {
                   Train Your Machine Learning Model
                 </h2>
                 <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#73675E' }}>
-                  Guided high-performance workflow with GPU-accelerated algorithms and real-time validation.
+                  Guided workflow that trains and evaluates models entirely in your browser, on your own device.
                 </p>
               </div>
 
@@ -469,7 +469,7 @@ export const App: React.FC = () => {
             <span>Web-Based ML Model Evaluator (Team 13)</span>
           </div>
           <div>
-            ISO/IEC 25010 Portability · In-Memory Isolation (SEC-1) · GPU Compute Acceleration
+            ISO/IEC 25010 Portability · In-Memory Isolation (SEC-1) · Runs entirely on your device
           </div>
         </div>
       </footer>
