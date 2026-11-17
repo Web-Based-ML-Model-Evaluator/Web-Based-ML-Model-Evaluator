@@ -8,6 +8,10 @@ export default defineConfig({
     port: 3000,
     open: false,
   },
+  // The engine runs in a module Web Worker that imports the WebAssembly bindings
+  worker: {
+    format: 'es',
+  },
   build: {
     outDir: '../dist',
     emptyOutDir: true,

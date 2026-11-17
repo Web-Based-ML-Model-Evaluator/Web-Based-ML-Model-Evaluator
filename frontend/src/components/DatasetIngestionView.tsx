@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ApiClient } from '../services/api';
 import { InfoTooltip } from './InfoTooltip';
 
 // ============================================================================
@@ -47,7 +48,6 @@ export interface DatasetReadySchema {
 
 export interface DatasetIngestionViewProps {
   onDatasetReady?: (datasetId: string, schema: DatasetReadySchema) => void;
-  apiBaseUrl?: string;
 }
 
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (NFR-4)
@@ -56,7 +56,7 @@ const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB (NFR-4)
 const thStyle: React.CSSProperties = { padding: '8px', borderBottom: '1px solid #e2e8f0' };
 const tdStyle: React.CSSProperties = { padding: '8px', borderBottom: '1px solid #f1f5f9' };
 
-// FR-3: strategy names must match the server's ImputationStrategy enum (snake_case)
+// FR-3: strategy names must match the engine's ImputationStrategy enum (snake_case)
 const STRATEGY_LABELS: Record<string, string> = {
   mean: 'Fill with mean',
   median: 'Fill with median',
@@ -65,7 +65,7 @@ const STRATEGY_LABELS: Record<string, string> = {
   drop_rows_with_null: 'Drop rows with a missing value',
   drop_column: 'Drop this column',
 };
-// SR-1: values the server treats as missing, so they can't be used as a fill-in constant
+// SR-1: values the engine treats as missing, so they can't be used as a fill-in constant
 const MISSING_MARKERS = ['', 'na', 'n/a', 'nan', 'null', 'none'];
 
 const NUMERIC_STRATEGIES = ['mean', 'median', 'mode', 'constant', 'drop_rows_with_null', 'drop_column'];
@@ -73,7 +73,6 @@ const CATEGORICAL_STRATEGIES = ['mode', 'constant', 'drop_rows_with_null', 'drop
 
 export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
   onDatasetReady,
-  apiBaseUrl = 'http://localhost:8080',
 }) => {
   const [file, setFile] = useState<File | null>(null);
   const [uploadResult, setUploadResult] = useState<DatasetUploadResponse | null>(null);
@@ -97,7 +96,7 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     setPreprocessResult(null);
   };
 
-  // FR-1 / NFR-4: validate the chosen file BEFORE sending it to the server
+  // FR-1 / NFR-4: validate the chosen file BEFORE handing it to the engine
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFile(null);
     setUploadResult(null);
@@ -122,8 +121,8 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     setFile(chosen);
   };
 
-  // FR-1: send the file to POST /api/v1/datasets/upload
-  // FR-2: the server's response contains the summary and preview shown in Step 2
+  // FR-1: the file is parsed by the on-device engine (nothing is uploaded to a server)
+  // FR-2: the engine returns the summary and preview shown in Step 2
   const handleUpload = async () => {
     if (!file) {
       setError('Please choose a CSV file first.');
@@ -134,36 +133,22 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     setUploadResult(null);
     resetPreprocessing();
     try {
-      const formData = new FormData();
-      formData.append('file', file); // the server expects the key "file"
-
-      const res = await fetch(`${apiBaseUrl}/api/v1/datasets/upload`, {
-        method: 'POST',
-        body: formData,
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        // Server errors look like { error: { code, message, ... } }
-        setError(data?.error?.message ?? 'Upload failed.');
-        return;
-      }
-      setUploadResult(data as DatasetUploadResponse);
-    } catch {
-      setError('Could not reach the server. Is it running on port 8001?');
+      setUploadResult((await ApiClient.uploadDataset(file)) as DatasetUploadResponse);
+    } catch (err: any) {
+      setError(err?.message ?? 'Upload failed.');
     } finally {
       setUploading(false);
     }
   };
 
-  // FR-3: send the chosen rules to POST /api/v1/datasets/{id}/preprocess
+  // FR-3: clean the data on-device with the chosen rules
   const handlePreprocess = async () => {
     if (!uploadResult) {
       setPreprocessError('Upload a CSV first.');
       return;
     }
 
-    // Build the payload the server expects.
+    // Build the rules the engine expects.
     // Most strategies are plain strings; a constant is sent as { constant: "value" }.
     const imputation_rules: Record<string, string | { constant: string }> = {};
     for (const col of uploadResult.column_names) {
@@ -196,24 +181,15 @@ export const DatasetIngestionView: React.FC<DatasetIngestionViewProps> = ({
     setPreprocessError(null);
     setPreprocessResult(null);
     try {
-      const res = await fetch(`${apiBaseUrl}/api/v1/datasets/${uploadResult.dataset_id}/preprocess`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          imputation_rules,
-          drop_duplicates: dropDuplicates,
-          trim_whitespace: trimWhitespace,
-        }),
-      });
-      const data = await res.json();
-
-      if (!res.ok) {
-        setPreprocessError(data?.error?.message ?? 'Preprocessing failed.');
-        return;
-      }
-      setPreprocessResult(data as PreprocessingResponse);
-    } catch {
-      setPreprocessError('Could not reach the server. Is it running on port 8001?');
+      const result = await ApiClient.preprocessDataset(
+        uploadResult.dataset_id,
+        imputation_rules,
+        dropDuplicates,
+        trimWhitespace,
+      );
+      setPreprocessResult(result as PreprocessingResponse);
+    } catch (err: any) {
+      setPreprocessError(err?.message ?? 'Preprocessing failed.');
     } finally {
       setProcessing(false);
     }

@@ -56,8 +56,6 @@ export const App: React.FC = () => {
     errorMessage: null,
   });
 
-  const apiBaseUrl = 'http://localhost:8080';
-
   useEffect(() => {
     probeGpuAcceleration().then((info) => {
       setGpuDeviceName(info.adapterName);
@@ -111,7 +109,7 @@ export const App: React.FC = () => {
       setCurrentStep(1);
       setPurgeStatus({
         loading: false,
-        successMessage: `Session memory successfully purged across backend memory. Zero persistent data remains.`,
+        successMessage: `All datasets and results were cleared from this browser tab's memory. Nothing is stored anywhere else.`,
         errorMessage: null,
       });
       setTimeout(() => {
@@ -338,7 +336,6 @@ export const App: React.FC = () => {
             >
               {currentStep === 1 && (
                 <DatasetIngestionView
-                  apiBaseUrl={apiBaseUrl}
                   onDatasetReady={handleDatasetReady}
                 />
               )}
@@ -348,7 +345,6 @@ export const App: React.FC = () => {
                   datasetId={activeDatasetId}
                   availableColumns={availableColumns}
                   columnTypes={columnTypes}
-                  apiBaseUrl={apiBaseUrl}
                   onConfigurationComplete={handleConfigurationComplete}
                 />
               )}
@@ -356,7 +352,6 @@ export const App: React.FC = () => {
               {currentStep === 3 && (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
                   taskConfig={taskConfig}
                 />
               )}
@@ -364,7 +359,6 @@ export const App: React.FC = () => {
               {currentStep === 4 && (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
                   initialTab="comparison"
                 />
               )}
@@ -439,7 +433,6 @@ export const App: React.FC = () => {
               ) : (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
                   initialTab="comparison"
                 />
               )}

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { InfoTooltip } from './InfoTooltip';
+import { ApiClient } from '../services/api';
 
 // Portion 2: ML Task Routing & Configuration
 // FR-4: Task Selection
@@ -15,7 +16,6 @@ export interface TaskConfigurationViewProps {
   availableColumns?: string[];
   columnTypes?: Record<string, string>;
   onConfigurationComplete?: (config: any) => void;
-  apiBaseUrl?: string;
 }
 
 const algorithmsByTask: Record<TaskType, string[]> = {
@@ -52,7 +52,6 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     target: 'Categorical',
   },
   onConfigurationComplete,
-  apiBaseUrl = 'http://localhost:8080',
 }) => {
   const [taskType, setTaskType] = useState<TaskType>('classification');
   const [algorithm, setAlgorithm] = useState<string>(
@@ -158,34 +157,22 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
 
     // Only move on to training when the configuration is confirmed valid.
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/config/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          task_type: taskType,
-          algorithm,
-          target_column: taskType === 'clustering' ? null : targetColumn,
-          feature_columns: selectedFeatures,
-          test_split_ratio: taskType === 'clustering' ? null : testSplitRatio,
-          num_clusters: taskType === 'clustering' ? numClusters : null,
-        }),
+      // Rejects with the validation errors when the configuration is invalid (FR-13)
+      await ApiClient.validateConfig({
+        dataset_id: datasetId,
+        task_type: taskType,
+        algorithm,
+        target_column: taskType === 'clustering' ? null : targetColumn,
+        feature_columns: selectedFeatures,
+        test_split_ratio: taskType === 'clustering' ? null : testSplitRatio,
+        num_clusters: taskType === 'clustering' ? numClusters : null,
+        random_seed: null,
       });
-
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        setValidationMessage(body?.error?.message || `Validation failed (HTTP ${response.status}).`);
-        return;
-      }
-      if (body && body.is_valid === false) {
-        setValidationMessage((body.errors as string[] | undefined)?.join(' ') || 'The configuration is not valid.');
-        return;
-      }
       setIsSuccess(true);
       setValidationMessage('Configuration is valid. Training the model...');
       onConfigurationComplete?.(config);
-    } catch {
-      setValidationMessage('Could not reach the evaluation engine, so the configuration was not validated.');
+    } catch (err: any) {
+      setValidationMessage(err?.message ?? 'The configuration is not valid.');
     } finally {
       setDispatching(false);
     }

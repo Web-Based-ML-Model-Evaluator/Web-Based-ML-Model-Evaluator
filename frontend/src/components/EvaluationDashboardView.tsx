@@ -76,7 +76,6 @@ export interface PcaClusteringData {
 
 export interface EvaluationDashboardProps {
   datasetId?: string;
-  apiBaseUrl?: string;
   /** Configuration from Step 2. When present, the model is trained on mount. */
   taskConfig?: any;
   initialTab?: 'results' | 'comparison' | 'ingest';
@@ -138,7 +137,6 @@ const formatMetric = (value: number | undefined) =>
 
 export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   datasetId = '',
-  apiBaseUrl = 'http://localhost:8080',
   taskConfig,
   initialTab = 'results',
 }) => {
@@ -238,11 +236,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/models/comparison/${encodeURIComponent(historyKey)}`);
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
-      }
-      const data = await response.json();
+      const data = await ApiClient.comparisonHistory(historyKey);
       setComparisonRuns((data.runs as ModelComparisonEntry[]) || []);
     } catch (err: any) {
       setError(`Could not load the model history (${err.message}).`);
@@ -250,7 +244,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl, historyKey]);
+  }, [historyKey]);
 
   useEffect(() => {
     fetchComparisonRuns();
@@ -321,18 +315,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
 
     setLoading(true);
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/models/compare`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ execution_ids: selectedExecutionIds }),
-      });
-
-      if (!response.ok) {
-        const errorJson = await response.json().catch(() => null);
-        throw new Error(errorJson?.error?.message || `HTTP ${response.status} comparison request failed.`);
-      }
-
-      const report: ComparisonReport = await response.json();
+      const report: ComparisonReport = await ApiClient.compareModels(selectedExecutionIds);
       setComparisonReport(report);
     } catch (err: any) {
       setError(`Comparison failed: ${err.message}`);
@@ -340,7 +323,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     } finally {
       setLoading(false);
     }
-  }, [apiBaseUrl, comparisonRuns, selectedExecutionIds]);
+  }, [comparisonRuns, selectedExecutionIds]);
 
   // Automatically trigger comparison on initial tab switch or selection change if >=2 models selected
   useEffect(() => {
