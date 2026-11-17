@@ -1,9 +1,14 @@
 /**
- * Unified Web ML Evaluator API Service Client
- * Connects to the consolidated high-performance Rust backend.
+ * Client for the on-device ML engine.
+ *
+ * Every call runs locally: the Rust engine is compiled to WebAssembly and runs in a Web
+ * Worker in this browser tab (see ../engine). Nothing is sent to a server. Failed calls
+ * reject with an EngineError whose `message` is safe to show and whose `code` follows the
+ * structured error format (FR-13).
  */
+import { callEngine, EngineError } from '../engine/client';
 
-const API_BASE = 'http://localhost:8080';
+export { EngineError };
 
 export interface DatasetUploadResult {
   dataset_id: string;
@@ -47,164 +52,141 @@ export interface ExecutionPayload {
   dataset_id: string;
   task_type: string;
   algorithm: string;
-  target_column?: string;
+  target_column?: string | null;
   feature_columns: string[];
-  test_split_ratio?: number;
-  num_clusters?: number;
+  test_split_ratio?: number | null;
+  num_clusters?: number | null;
   data?: any;
 }
 
+/** Imputation rule per column: a strategy name, or { constant: value }. */
+export type ImputationRules = Record<string, string | { constant: string }>;
+
 export const ApiClient = {
-  // Datasets
+  // Datasets (FR-1, FR-2, FR-3)
   async uploadDataset(file: File): Promise<DatasetUploadResult> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(`${API_BASE}/api/v1/datasets/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Upload failed with status ${res.status}`);
-    }
-    return res.json();
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return callEngine('upload_dataset', { filename: file.name }, bytes);
   },
 
-  async getPreview(datasetId: string): Promise<DatasetUploadResult> {
-    const res = await fetch(`${API_BASE}/api/v1/datasets/${datasetId}/preview`);
-    if (!res.ok) throw new Error(`Preview failed with status ${res.status}`);
-    return res.json();
+  getPreview(datasetId: string): Promise<DatasetUploadResult> {
+    return callEngine('preview', { dataset_id: datasetId });
   },
 
-  async preprocessDataset(datasetId: string, rules: Record<string, string>, dropDuplicates = true, trimWhitespace = true): Promise<PreprocessingResult> {
-    const res = await fetch(`${API_BASE}/api/v1/datasets/${datasetId}/preprocess`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+  preprocessDataset(
+    datasetId: string,
+    rules: ImputationRules,
+    dropDuplicates = true,
+    trimWhitespace = true,
+  ): Promise<PreprocessingResult> {
+    return callEngine('preprocess', {
+      dataset_id: datasetId,
+      request: {
         imputation_rules: rules,
         drop_duplicates: dropDuplicates,
         trim_whitespace: trimWhitespace,
-      }),
+      },
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Preprocessing failed`);
-    }
-    return res.json();
   },
 
-  async getSchema(datasetId: string) {
-    const res = await fetch(`${API_BASE}/api/v1/datasets/${datasetId}/schema`);
-    if (!res.ok) throw new Error(`Failed to fetch schema`);
-    return res.json();
+  getSchema(datasetId: string): Promise<any> {
+    return callEngine('schema', { dataset_id: datasetId });
   },
 
-  // Task Routing
-  async listTasks(): Promise<TaskSupportInfo[]> {
-    const res = await fetch(`${API_BASE}/api/v1/config/tasks`);
-    if (!res.ok) throw new Error(`Failed to fetch tasks`);
-    return res.json();
+  // Task routing (FR-4 to FR-7)
+  listTasks(): Promise<TaskSupportInfo[]> {
+    return callEngine('list_tasks');
   },
 
-  async validateConfig(config: any) {
-    const res = await fetch(`${API_BASE}/api/v1/config/validate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(config),
-    });
-    return res.json();
+  /** Resolves when the configuration is valid; rejects with the reasons otherwise. */
+  validateConfig(config: any): Promise<any> {
+    return callEngine('validate_config', config);
   },
 
-  async dispatchPipeline(config: any) {
-    const res = await fetch(`${API_BASE}/api/v1/pipeline/dispatch`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ config }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Pipeline dispatch failed');
-    }
-    return res.json();
+  /** Validates, trains and evaluates the configured model (FR-8 to FR-12). */
+  dispatchPipeline(config: any): Promise<any> {
+    return callEngine('dispatch_pipeline', { config: { random_seed: null, ...config } });
   },
 
-  // Model Execution
-  async executeModel(payload: ExecutionPayload) {
-    const res = await fetch(`${API_BASE}/api/v1/models/execute`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || 'Execution failed');
-    }
-    return res.json();
+  executeModel(payload: ExecutionPayload): Promise<any> {
+    return callEngine('execute_model', { data: null, ...payload });
   },
 
-  // Hardware Status
-  async getHardwareStatus() {
-    const res = await fetch(`${API_BASE}/api/v1/hardware/status`);
-    if (!res.ok) throw new Error('Hardware probe failed');
-    return res.json();
+  // Comparison (FR-12)
+  comparisonHistory(datasetId?: string): Promise<{ runs: any[]; total_runs: number }> {
+    return callEngine('comparison_history', { dataset_id: datasetId || 'all' });
   },
 
-  // Purge Session
-  async purgeSession() {
-    const res = await fetch(`${API_BASE}/api/v1/session/purge`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    });
-    return res.json();
+  compareModels(executionIds: string[]): Promise<any> {
+    return callEngine('compare_models', { execution_ids: executionIds });
   },
 
-  // Model Ingestion & Evaluation (Issues #31, #32)
-  async uploadModel(file: File, taskType = 'classification', architecture = ''): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('task_type', taskType);
-    if (architecture) {
-      formData.append('architecture', architecture);
-    }
-    const res = await fetch(`${API_BASE}/api/v1/models/upload`, {
-      method: 'POST',
-      body: formData,
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Model upload failed (${res.status})`);
-    }
-    return res.json();
+  // Session (SEC-1, SEC-3): clears every dataset and result held in this tab
+  purgeSession(): Promise<any> {
+    return callEngine('purge_session');
   },
 
-  async listIngestedModels(): Promise<any[]> {
-    const res = await fetch(`${API_BASE}/api/v1/models/ingested`);
-    if (!res.ok) return [];
-    return res.json();
+  // Uploaded models (#46): ONNX files run on this device with ONNX Runtime Web
+  // (on the GPU via WebGPU when available, otherwise on the CPU via WebAssembly).
+
+  /** Loads an .onnx model into the engine worker; other formats are rejected with advice. */
+  async uploadModel(file: File, taskType = 'classification'): Promise<UploadedModel> {
+    const bytes = new Uint8Array(await file.arrayBuffer());
+    return callEngine('load_model', { filename: file.name, task_type: taskType }, bytes);
   },
 
+  listIngestedModels(): Promise<UploadedModel[]> {
+    return callEngine('list_models');
+  },
+
+  /**
+   * Runs the model on the dataset's feature columns and scores its predictions against the
+   * target column. Every row of the dataset is used as test data.
+   */
   async evaluateIngestedModel(
     modelId: string,
     datasetId: string,
-    targetColumn?: string,
-    featureColumns: string[] = []
+    targetColumn: string,
+    featureColumns: string[],
   ): Promise<any> {
-    const res = await fetch(`${API_BASE}/api/v1/models/evaluate-ingested`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model_id: modelId,
-        dataset_id: datasetId,
-        target_column: targetColumn,
-        feature_columns: featureColumns,
-      }),
+    const result: any = await callEngine('evaluate_model', {
+      model_id: modelId,
+      dataset_id: datasetId,
+      target_column: targetColumn,
+      feature_columns: featureColumns,
     });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.error?.message || `Model evaluation failed (${res.status})`);
-    }
-    return res.json();
+    return toTaggedMetrics(result);
   },
 };
 
+export interface UploadedModel {
+  model_id: string;
+  filename: string;
+  file_format: string;
+  file_size_bytes: number;
+  task_type: 'classification' | 'regression';
+  input_name: string;
+  input_shape: Array<number | null> | null;
+  output_names: string[];
+  execution_provider: 'webgpu' | 'wasm';
+}
 
+/**
+ * The evaluation views read `metrics.Classification` / `metrics.Regression` and a
+ * `{ labels, matrix }` confusion matrix; the engine returns flat metrics.
+ */
+function toTaggedMetrics(result: any): any {
+  const m = result?.metrics ?? {};
+  if (Array.isArray(m.confusion_matrix)) {
+    return {
+      ...result,
+      metrics: {
+        Classification: { ...m, confusion_matrix: { labels: m.class_labels ?? [], matrix: m.confusion_matrix } },
+      },
+    };
+  }
+  if (typeof m.r2_score === 'number') {
+    return { ...result, metrics: { Regression: m } };
+  }
+  return result;
+}

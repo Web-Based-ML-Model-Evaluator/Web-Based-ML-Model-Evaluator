@@ -207,7 +207,7 @@ export const Hero: React.FC<HeroProps> = ({ onSelectAction }) => {
               Train a Model
               <InfoTooltip
                 title="Training Workflow"
-                content="Upload your dataset, impute missing values, configure features and targets, and train ML algorithms with GPU acceleration."
+                content="Upload your dataset, impute missing values, configure features and targets, and train ML algorithms, all on your own device."
               />
             </h2>
 

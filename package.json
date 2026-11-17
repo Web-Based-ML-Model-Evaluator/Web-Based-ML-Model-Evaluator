@@ -1,17 +1,15 @@
 {
   "name": "web-based-ml-model-evaluator",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "High-Performance Web-Based Machine Learning Platform with GPU & VRAM Acceleration",
+  "description": "Web-based ML model evaluator that runs entirely on the visitor's device (Rust compiled to WebAssembly)",
   "scripts": {
+    "build:engine": "node scripts/engine.mjs build",
     "dev": "vite",
-    "build": "vite build",
+    "build": "npm run build:engine && vite build",
     "preview": "vite preview",
-    "start": "node scripts/cargo-runner.js run --manifest-path backend/Cargo.toml",
-    "start:backend": "node scripts/cargo-runner.js run --manifest-path backend/Cargo.toml",
-    "test": "node scripts/cargo-runner.js test --manifest-path backend/Cargo.toml --offline",
-    "test:backend": "node scripts/cargo-runner.js test --manifest-path backend/Cargo.toml --offline",
-    "test:all": "node scripts/cargo-runner.js test --workspace --offline && npm run typecheck",
+    "test": "node scripts/engine.mjs test",
+    "test:all": "node scripts/engine.mjs test && npm run typecheck",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
@@ -23,6 +21,7 @@
   },
   "dependencies": {
     "lucide-react": "^0.300.0",
+    "onnxruntime-web": "1.31.1",
     "react": "^18.2.0",
     "react-dom": "^18.2.0"
   }

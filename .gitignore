@@ -16,3 +16,6 @@ Thumbs.db
 *.log
 .vscode/
 .idea/
+
+# Generated WebAssembly engine bindings (npm run build:engine)
+frontend/src/engine/pkg/

@@ -1,6 +1,7 @@
 
 import React, { useState } from 'react';
 import { InfoTooltip } from './InfoTooltip';
+import { ApiClient } from '../services/api';
 
 // Portion 2: ML Task Routing & Configuration
 // FR-4: Task Selection
@@ -15,7 +16,6 @@ export interface TaskConfigurationViewProps {
   availableColumns?: string[];
   columnTypes?: Record<string, string>;
   onConfigurationComplete?: (config: any) => void;
-  apiBaseUrl?: string;
 }
 
 const algorithmsByTask: Record<TaskType, string[]> = {
@@ -52,7 +52,6 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     target: 'Categorical',
   },
   onConfigurationComplete,
-  apiBaseUrl = 'http://localhost:8080',
 }) => {
   const [taskType, setTaskType] = useState<TaskType>('classification');
   const [algorithm, setAlgorithm] = useState<string>(
@@ -154,39 +153,28 @@ export const TaskConfigurationView: React.FC<TaskConfigurationViewProps> = ({
     };
 
     setDispatching(true);
-    setValidationMessage('Validating configuration with backend (:8002)...');
+    setValidationMessage('Validating configuration...');
 
+    // Only move on to training when the configuration is confirmed valid.
     try {
-      const response = await fetch(`${apiBaseUrl}/api/v1/config/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          dataset_id: datasetId,
-          task_type: taskType,
-          algorithm,
-          target_column: taskType === 'clustering' ? null : targetColumn,
-          feature_columns: selectedFeatures,
-          test_split_ratio: taskType === 'clustering' ? null : testSplitRatio,
-          num_clusters: taskType === 'clustering' ? numClusters : null,
-        }),
+      // Rejects with the validation errors when the configuration is invalid (FR-13)
+      await ApiClient.validateConfig({
+        dataset_id: datasetId,
+        task_type: taskType,
+        algorithm,
+        target_column: taskType === 'clustering' ? null : targetColumn,
+        feature_columns: selectedFeatures,
+        test_split_ratio: taskType === 'clustering' ? null : testSplitRatio,
+        num_clusters: taskType === 'clustering' ? numClusters : null,
+        random_seed: null,
       });
-
-      if (response.ok) {
-        setIsSuccess(true);
-        setValidationMessage('Configuration validated successfully with Portion 2 service.');
-      } else {
-        const errJson = await response.json().catch(() => null);
-        const errMsg = errJson?.error?.message || `Validation returned HTTP ${response.status}`;
-        setValidationMessage(`Backend notice: ${errMsg} (Proceeding with validated client config)`);
-        setIsSuccess(true);
-      }
-    } catch {
-      // In standalone / offline mock mode
       setIsSuccess(true);
-      setValidationMessage('Configuration validated successfully (Offline Mock Mode).');
+      setValidationMessage('Configuration is valid. Training the model...');
+      onConfigurationComplete?.(config);
+    } catch (err: any) {
+      setValidationMessage(err?.message ?? 'The configuration is not valid.');
     } finally {
       setDispatching(false);
-      onConfigurationComplete?.(config);
     }
   };
 

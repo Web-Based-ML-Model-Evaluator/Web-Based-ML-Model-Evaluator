@@ -1,5 +1,11 @@
 [workspace]
 members = [
-    "backend",
+    "engine",
 ]
 resolver = "2"
+
+# The engine ships to browsers as WebAssembly, so optimise the release build for size.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1

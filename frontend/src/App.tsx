@@ -6,7 +6,7 @@ import { DatasetIngestionView } from './components/DatasetIngestionView';
 import { TaskConfigurationView } from './components/TaskConfigurationView';
 import { EvaluationDashboardView } from './components/EvaluationDashboardView';
 import { SimpleEvaluateModelView } from './components/SimpleEvaluateModelView';
-import { probeGpuAcceleration } from './services/webgpu';
+import { gpuLabel, probeDevice } from './services/webgpu';
 import { ApiClient } from './services/api';
 
 export type MainView = 'home' | 'train' | 'evaluate';
@@ -35,25 +35,14 @@ export const App: React.FC = () => {
 
   // Hardware Acceleration State
   const [gpuDeviceName, setGpuDeviceName] = useState<string>('Detecting GPU...');
-  const [isGpuActive, setIsGpuActive] = useState<boolean>(true);
+  const [isGpuActive, setIsGpuActive] = useState<boolean>(false);
 
   // Session & Dataset State
   const [sessionId] = useState<string>(() => `session-${Math.random().toString(36).substring(2, 9)}`);
-  const [activeDatasetId, setActiveDatasetId] = useState<string>('dataset-001');
-  const [availableColumns, setAvailableColumns] = useState<string[]>([
-    'sepal_length',
-    'sepal_width',
-    'petal_length',
-    'petal_width',
-    'species',
-  ]);
-  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({
-    sepal_length: 'Numeric',
-    sepal_width: 'Numeric',
-    petal_length: 'Numeric',
-    petal_width: 'Numeric',
-    species: 'Categorical',
-  });
+  // Empty until the user uploads a dataset in Step 1
+  const [activeDatasetId, setActiveDatasetId] = useState<string>('');
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [columnTypes, setColumnTypes] = useState<Record<string, string>>({});
   const [taskConfig, setTaskConfig] = useState<any>(null);
 
   // Security Purge State (SEC-1, SEC-3)
@@ -67,12 +56,10 @@ export const App: React.FC = () => {
     errorMessage: null,
   });
 
-  const apiBaseUrl = 'http://localhost:8080';
-
   useEffect(() => {
-    probeGpuAcceleration().then((info) => {
-      setGpuDeviceName(info.adapterName);
-      setIsGpuActive(info.isSupported);
+    probeDevice().then((info) => {
+      setGpuDeviceName(gpuLabel(info));
+      setIsGpuActive(info.webgpu.supported);
     });
   }, []);
 
@@ -122,7 +109,7 @@ export const App: React.FC = () => {
       setCurrentStep(1);
       setPurgeStatus({
         loading: false,
-        successMessage: `Session memory successfully purged across backend memory. Zero persistent data remains.`,
+        successMessage: `All datasets and results were cleared from this browser tab's memory. Nothing is stored anywhere else.`,
         errorMessage: null,
       });
       setTimeout(() => {
@@ -228,7 +215,7 @@ export const App: React.FC = () => {
                   Train Your Machine Learning Model
                 </h2>
                 <p style={{ margin: '4px 0 0', fontSize: '14px', color: '#73675E' }}>
-                  Guided high-performance workflow with GPU-accelerated algorithms and real-time validation.
+                  Guided workflow that trains and evaluates models entirely in your browser, on your own device.
                 </p>
               </div>
 
@@ -349,7 +336,6 @@ export const App: React.FC = () => {
             >
               {currentStep === 1 && (
                 <DatasetIngestionView
-                  apiBaseUrl={apiBaseUrl}
                   onDatasetReady={handleDatasetReady}
                 />
               )}
@@ -359,7 +345,6 @@ export const App: React.FC = () => {
                   datasetId={activeDatasetId}
                   availableColumns={availableColumns}
                   columnTypes={columnTypes}
-                  apiBaseUrl={apiBaseUrl}
                   onConfigurationComplete={handleConfigurationComplete}
                 />
               )}
@@ -367,14 +352,14 @@ export const App: React.FC = () => {
               {currentStep === 3 && (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
+                  taskConfig={taskConfig}
                 />
               )}
 
               {currentStep === 4 && (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
+                  initialTab="comparison"
                 />
               )}
             </div>
@@ -448,7 +433,7 @@ export const App: React.FC = () => {
               ) : (
                 <EvaluationDashboardView
                   datasetId={activeDatasetId}
-                  apiBaseUrl={apiBaseUrl}
+                  initialTab="comparison"
                 />
               )}
             </div>
@@ -484,7 +469,7 @@ export const App: React.FC = () => {
             <span>Web-Based ML Model Evaluator (Team 13)</span>
           </div>
           <div>
-            ISO/IEC 25010 Portability · In-Memory Isolation (SEC-1) · GPU Compute Acceleration
+            ISO/IEC 25010 Portability · In-Memory Isolation (SEC-1) · Runs entirely on your device
           </div>
         </div>
       </footer>

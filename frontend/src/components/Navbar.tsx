@@ -10,8 +10,8 @@ interface NavbarProps {
 export const Navbar: React.FC<NavbarProps> = ({
   currentView,
   onNavigate,
-  gpuDeviceName = 'Hardware WebGPU Device',
-  isGpuActive = true,
+  gpuDeviceName = 'Detecting...',
+  isGpuActive = false,
 }) => {
   return (
     <header
@@ -146,7 +146,11 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
         {/* GPU Status Pill */}
         <div
-          title={`Compute Hardware: ${gpuDeviceName}`}
+          title={
+            isGpuActive
+              ? `WebGPU is available (${gpuDeviceName}): uploaded ONNX models run on this GPU. Everything runs on this device.`
+              : 'No WebGPU in this browser: everything still runs on this device, on the CPU.'
+          }
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -169,7 +173,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               boxShadow: isGpuActive ? '0 0 6px #22C55E' : 'none',
             }}
           />
-          <span>GPU/VRAM Accelerated</span>
+          <span>{isGpuActive ? 'Runs on your device · WebGPU' : 'Runs on your device · CPU'}</span>
         </div>
 
         {/* Circular User Avatar Button (From Screenshot) */}

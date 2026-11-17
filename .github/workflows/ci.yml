@@ -2,7 +2,7 @@ name: CI Pipeline
 
 on:
   push:
-    branches: [ main, 'issue-**' ]
+    branches: [ main, 'issue-**', 'feat/**' ]
   pull_request:
     branches: [ main ]
 
@@ -11,41 +11,55 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # 1. Rust Backend CI (Compiles and runs unified test suite)
-  rust-backend:
-    name: Unified Rust Backend CI
+  # 1. The ML engine: native tests (the same Rust code that runs in the browser)
+  engine:
+    name: Engine (Rust) tests
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Rust toolchain
-        uses: actions-rust-lang/setup-rust-toolchain@v1
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-          components: clippy, rustfmt
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
 
-      - name: Cargo check (Fast compile verification)
-        run: cargo check --workspace --all-targets
+      - uses: Swatinem/rust-cache@v2
 
-      - name: Run unified backend tests
+      - name: Cargo check (native and WebAssembly)
+        run: |
+          cargo check --workspace --all-targets
+          cargo check -p ml_engine --target wasm32-unknown-unknown
+
+      - name: Run engine tests
         run: cargo test --workspace --verbose
 
       - name: Code formatting check (rustfmt)
         run: cargo fmt --all -- --check
         continue-on-error: true
 
-      - name: Clippy code quality lint
+      - name: Lint (clippy)
         run: cargo clippy --workspace --all-targets -- -D warnings
         continue-on-error: true
 
-  # 2. Frontend CI (Typecheck & Vite Production Build)
-  frontend-check:
-    name: Frontend Client CI
+  # 2. The static site: build the WebAssembly engine, typecheck and bundle the frontend
+  web:
+    name: Web bundle (WebAssembly + frontend)
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Install wasm-bindgen CLI (must match the crate version)
+        uses: taiki-e/install-action@v2
+        with:
+          tool: wasm-bindgen-cli@0.2.130
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -56,8 +70,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run TypeScript typecheck (tsc --noEmit)
+      - name: Build the WebAssembly engine
+        run: npm run build:engine
+
+      - name: TypeScript typecheck
         run: npm run typecheck
 
-      - name: Run Vite production build
-        run: npm run build
+      - name: Build the static site
+        run: npx vite build
