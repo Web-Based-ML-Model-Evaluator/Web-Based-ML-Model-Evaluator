@@ -19,3 +19,9 @@ Thumbs.db
 
 # Generated WebAssembly engine bindings (npm run build:engine)
 frontend/src/engine/pkg/
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/

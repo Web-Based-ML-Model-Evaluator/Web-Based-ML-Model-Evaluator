@@ -1,218 +1,103 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { Terminal, Cpu, Play, Search, Activity, CheckSquare } from 'lucide-react';
+import { BackendApi } from '../services/backendApi';
 
 interface NavbarProps {
-  currentView: 'home' | 'train' | 'evaluate';
-  onNavigate: (view: 'home' | 'train' | 'evaluate') => void;
-  gpuDeviceName?: string;
-  isGpuActive?: boolean;
+  activeTab: 'train' | 'evaluate';
+  onTabChange: (tab: 'train' | 'evaluate') => void;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({
-  currentView,
-  onNavigate,
-  gpuDeviceName = 'Detecting...',
-  isGpuActive = false,
-}) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, onTabChange }) => {
+  const [backendStatus, setBackendStatus] = useState<{ online: boolean; checking: boolean }>({
+    online: false,
+    checking: true,
+  });
+
+  useEffect(() => {
+    let mounted = true;
+    const check = async () => {
+      const res = await BackendApi.checkHealth();
+      if (mounted) {
+        setBackendStatus({ online: res.online, checking: false });
+      }
+    };
+    check();
+    const interval = setInterval(check, 6000);
+    return () => {
+      mounted = false;
+      clearInterval(interval);
+    };
+  }, []);
+
   return (
-    <header
-      style={{
-        width: '100%',
-        padding: '24px 48px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        boxSizing: 'border-box',
-      }}
-    >
-      {/* Brand Logo & Name (Matching Screenshot) */}
-      <div
-        onClick={() => onNavigate('home')}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
-      >
-        {/* Isometric 3-Stacked Orange Diamonds Logo */}
-        <svg
-          width="32"
-          height="32"
-          viewBox="0 0 32 32"
-          fill="none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          {/* Top Layer */}
-          <path
-            d="M16 3L28 9L16 15L4 9L16 3Z"
-            fill="#E2632B"
-          />
-          {/* Middle Layer */}
-          <path
-            d="M4 14.5L16 20.5L28 14.5L28 16.5L16 22.5L4 16.5V14.5Z"
-            fill="#E2632B"
-            opacity="0.9"
-          />
-          {/* Bottom Layer */}
-          <path
-            d="M4 20L16 26L28 20V22L16 28L4 22V20Z"
-            fill="#C94F1A"
-          />
-        </svg>
-
-        <span
-          style={{
-            fontSize: '22px',
-            fontWeight: 800,
-            color: '#1C1917',
-            letterSpacing: '-0.3px',
-            fontFamily: "var(--font-sans, 'Inter', sans-serif)",
-          }}
-        >
-          ML Lab
-        </span>
-      </div>
-
-      {/* Center Nav Pills (Smooth navigation between Home, Train, Evaluate) */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          backgroundColor: 'rgba(255, 255, 255, 0.5)',
-          padding: '4px',
-          borderRadius: '24px',
-          border: '1px solid #EBE1D5',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => onNavigate('home')}
-          style={{
-            padding: '6px 16px',
-            borderRadius: '20px',
-            border: 'none',
-            backgroundColor: currentView === 'home' ? '#FFFFFF' : 'transparent',
-            color: currentView === 'home' ? '#D45A1E' : '#72665C',
-            fontWeight: 600,
-            fontSize: '13px',
-            cursor: 'pointer',
-            boxShadow: currentView === 'home' ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          Home
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('train')}
-          style={{
-            padding: '6px 16px',
-            borderRadius: '20px',
-            border: 'none',
-            backgroundColor: currentView === 'train' ? '#FFFFFF' : 'transparent',
-            color: currentView === 'train' ? '#D45A1E' : '#72665C',
-            fontWeight: 600,
-            fontSize: '13px',
-            cursor: 'pointer',
-            boxShadow: currentView === 'train' ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          Train a Model
-        </button>
-        <button
-          type="button"
-          onClick={() => onNavigate('evaluate')}
-          style={{
-            padding: '6px 16px',
-            borderRadius: '20px',
-            border: 'none',
-            backgroundColor: currentView === 'evaluate' ? '#FFFFFF' : 'transparent',
-            color: currentView === 'evaluate' ? '#D45A1E' : '#72665C',
-            fontWeight: 600,
-            fontSize: '13px',
-            cursor: 'pointer',
-            boxShadow: currentView === 'evaluate' ? '0 2px 6px rgba(0,0,0,0.05)' : 'none',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          Evaluate a Model
-        </button>
-      </div>
-
-      {/* Right Controls: GPU Badge & Profile Avatar (Matching Screenshot) */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-        {/* GPU Status Pill */}
-        <div
-          title={
-            isGpuActive
-              ? `WebGPU is available (${gpuDeviceName}): uploaded ONNX models run on this GPU. Everything runs on this device.`
-              : 'No WebGPU in this browser: everything still runs on this device, on the CPU.'
-          }
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '6px 12px',
-            borderRadius: '16px',
-            backgroundColor: isGpuActive ? '#F0FDF4' : '#F8FAFC',
-            border: `1px solid ${isGpuActive ? '#BBF7D0' : '#E2E8F0'}`,
-            fontSize: '11px',
-            fontWeight: 600,
-            color: isGpuActive ? '#166534' : '#64748B',
-          }}
-        >
-          <span
-            style={{
-              width: '7px',
-              height: '7px',
-              borderRadius: '50%',
-              backgroundColor: isGpuActive ? '#22C55E' : '#94A3B8',
-              boxShadow: isGpuActive ? '0 0 6px #22C55E' : 'none',
-            }}
-          />
-          <span>{isGpuActive ? 'Runs on your device · WebGPU' : 'Runs on your device · CPU'}</span>
+    <header className="border-b-2 border-[#101010] bg-[#FAF5ED] sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+        
+        {/* Brand / Logo */}
+        <div className="flex items-center gap-3">
+          <div className="bg-[#101010] text-[#FF5500] font-mono font-black text-base px-2.5 py-1 border-2 border-[#101010] shadow-[2px_2px_0px_#FF5500]">
+            ML//SYS
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="font-extrabold text-lg tracking-tight text-[#101010]">
+                ML STUDIO
+              </span>
+              <span className="font-mono text-[10px] font-bold uppercase px-1.5 py-0.5 bg-[#FF5500] text-white border border-[#101010] shadow-[1px_1px_0px_#101010]">
+                RUST 2.0
+              </span>
+            </div>
+          </div>
         </div>
 
-        {/* Circular User Avatar Button (From Screenshot) */}
-        <button
-          type="button"
-          className="user-avatar-btn"
-          title="User Account"
-          aria-label="User Account"
-          style={{
-            width: '40px',
-            height: '40px',
-            borderRadius: '50%',
-            border: '1.5px solid #E6DDD1',
-            backgroundColor: '#FFFFFF',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            padding: 0,
-            boxShadow: '0 2px 5px rgba(0,0,0,0.04)',
-          }}
-        >
-          {/* Simple minimalist line-art user silhouette */}
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="#38302A"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
+        {/* 2-Part Boxy Switcher */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => onTabChange('train')}
+            className={`flex items-center gap-2 px-4 py-2 font-mono text-xs font-bold transition-all border-2 border-[#101010] ${
+              activeTab === 'train'
+                ? 'bg-[#FF5500] text-white shadow-[3px_3px_0px_#101010] -translate-x-0.5 -translate-y-0.5'
+                : 'bg-white text-[#101010] hover:bg-[#FAF5ED] shadow-[2px_2px_0px_#101010]'
+            }`}
           >
-            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-            <circle cx="12" cy="7" r="4" />
-          </svg>
-        </button>
+            <Play className={`w-3.5 h-3.5 ${activeTab === 'train' ? 'fill-white' : 'fill-none'}`} />
+            <span>01 // TRAIN</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onTabChange('evaluate')}
+            className={`flex items-center gap-2 px-4 py-2 font-mono text-xs font-bold transition-all border-2 border-[#101010] ${
+              activeTab === 'evaluate'
+                ? 'bg-[#FF5500] text-white shadow-[3px_3px_0px_#101010] -translate-x-0.5 -translate-y-0.5'
+                : 'bg-white text-[#101010] hover:bg-[#FAF5ED] shadow-[2px_2px_0px_#101010]'
+            }`}
+          >
+            <Search className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>02 // EVALUATE</span>
+          </button>
+        </div>
+
+        {/* Engine Status */}
+        <div className="flex items-center">
+          <div className="flex items-center gap-2 px-2.5 py-1 bg-white border-2 border-[#101010] shadow-[2px_2px_0px_#101010] font-mono text-[11px] font-bold">
+            <span
+              className={`w-2 h-2 border border-[#101010] ${
+                backendStatus.online ? 'bg-[#10B981] animate-pulse' : 'bg-[#EF4444]'
+              }`}
+            />
+            <span className="text-[#101010]">
+              {backendStatus.checking
+                ? 'CHECKING...'
+                : backendStatus.online
+                ? 'CARGO :8080'
+                : 'OFFLINE'}
+            </span>
+          </div>
+        </div>
+
       </div>
     </header>
   );
 };
-
