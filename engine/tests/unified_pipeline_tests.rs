@@ -25,6 +25,11 @@ fn iris_like_csv() -> String {
 fn full_pipeline_runs_in_memory_and_purges() {
     let mut session = Session::new();
 
+    let empty_history = session
+        .call("comparison_history", json!({ "dataset_id": "all" }), None)
+        .unwrap();
+    assert_eq!(empty_history["total_runs"], 0);
+
     let upload = session
         .call(
             "upload_dataset",
