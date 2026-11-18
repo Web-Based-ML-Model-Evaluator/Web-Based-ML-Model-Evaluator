@@ -1,3 +1,4 @@
+
 use crate::models::{TaskConfiguration, TaskType, ValidationResult};
 use std::collections::HashMap;
 
@@ -27,7 +28,7 @@ pub fn get_supported_algorithms(task: &TaskType) -> Vec<&'static str> {
 pub fn validate_task_config(
     config: &TaskConfiguration,
     available_columns: Option<&Vec<String>>,
-    _column_types: Option<&HashMap<String, String>>,
+    column_types: Option<&HashMap<String, String>>,
 ) -> ValidationResult {
     let mut errors = Vec::new();
     let warnings = Vec::new();
@@ -75,6 +76,22 @@ pub fn validate_task_config(
                             ));
                         }
                     }
+
+                    // Regression requires a numeric target column.
+                    if config.task_type == TaskType::Regression {
+                        if let Some(types) = column_types {
+                            if let Some(target_type) = types.get(target) {
+                                if target_type != "Numeric" {
+                                    errors.push(format!(
+                                        "Regression target column '{}' must be numeric, but its inferred type is '{}'.",
+                                        target, target_type
+                                    ));
+                                }
+                            }
+                        }
+                    }
+
+                    // Classification supports numeric and categorical targets.
                 }
             }
         }
@@ -114,7 +131,7 @@ pub fn validate_task_config(
             }
         }
 
-        // FR-7: Train/test split ratio bounds (5% to 50%)
+        // FR-7: Train/test split ratio bounds (5% to 50%).
         if let Some(ratio) = config.test_split_ratio {
             if !(0.05..=0.50).contains(&ratio) {
                 errors.push(format!(
@@ -125,7 +142,22 @@ pub fn validate_task_config(
         }
     }
 
-    // FR-6: Clustering parameter k >= 2
+    // Validate selected feature columns.
+    // Missing type metadata is safely skipped.
+    if let Some(types) = column_types {
+        for feature in &config.feature_columns {
+            if let Some(column_type) = types.get(feature) {
+                if column_type != "Numeric" {
+                    errors.push(format!(
+                        "Feature column '{}' must be numeric, but its inferred type is '{}'.",
+                        feature, column_type
+                    ));
+                }
+            }
+        }
+    }
+
+    // FR-6: Clustering parameter k >= 2.
     if config.task_type == TaskType::Clustering {
         if let Some(k) = config.num_clusters {
             if k < 2 {
@@ -283,8 +315,10 @@ mod tests {
             Some("target"),
             vec!["feature1"],
         );
-        config.test_split_ratio = Some(0.85); // 85% exceeds 50% limit
+        config.test_split_ratio = Some(0.85);
+
         let result = validate_task_config(&config, None, None);
+
         assert!(!result.is_valid);
         assert!(result
             .errors
@@ -301,14 +335,231 @@ mod tests {
             target_column: None,
             feature_columns: vec!["feature1".to_string()],
             test_split_ratio: None,
-            num_clusters: Some(1), // k < 2
+            num_clusters: Some(1),
             random_seed: None,
         };
+
         let result = validate_task_config(&config, None, None);
+
         assert!(!result.is_valid);
         assert!(result
             .errors
             .iter()
             .any(|e| e.contains("at least 2 clusters")));
     }
+
+    // Numeric feature validation tests.
+
+    #[test]
+    fn accepts_numeric_feature_columns() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn rejects_categorical_feature_columns() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|error| {
+            error.contains("feature1") && error.contains("must be numeric")
+        }));
+    }
+
+    // Regression target validation tests.
+
+    #[test]
+    fn accepts_numeric_regression_target() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn rejects_categorical_regression_target() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|error| {
+            error.contains("target") && error.contains("must be numeric")
+        }));
+    }
+
+    // Classification target compatibility tests.
+
+    #[test]
+    fn accepts_categorical_classification_target() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn accepts_numeric_classification_target() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    // Missing column-type metadata tests.
+
+    #[test]
+    fn handles_missing_column_types_without_panicking() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let result = validate_task_config(&config, None, None);
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn handles_missing_feature_type_without_panicking() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let column_types = HashMap::new();
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn handles_missing_target_type_without_panicking() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    // Clustering feature validation tests.
+
+    #[test]
+    fn accepts_numeric_clustering_features() {
+        let config = TaskConfiguration {
+            dataset_id: "test-dataset".to_string(),
+            task_type: TaskType::Clustering,
+            algorithm: "K-Means Clustering".to_string(),
+            target_column: None,
+            feature_columns: vec!["feature1".to_string()],
+            test_split_ratio: None,
+            num_clusters: Some(3),
+            random_seed: None,
+        };
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn rejects_categorical_clustering_features() {
+        let config = TaskConfiguration {
+            dataset_id: "test-dataset".to_string(),
+            task_type: TaskType::Clustering,
+            algorithm: "K-Means Clustering".to_string(),
+            target_column: None,
+            feature_columns: vec!["feature1".to_string()],
+            test_split_ratio: None,
+            num_clusters: Some(3),
+            random_seed: None,
+        };
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|error| {
+            error.contains("feature1") && error.contains("must be numeric")
+        }));
+    }
+
 }
