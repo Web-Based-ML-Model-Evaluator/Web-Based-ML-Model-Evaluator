@@ -1,5 +1,4 @@
 use crate::models::ModelComparisonEntry;
-use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -333,7 +332,7 @@ mod tests {
             dataset_id: "dataset-test".to_string(),
             task_type: "Classification".to_string(),
             algorithm: algo.to_string(),
-            executed_at: Utc::now(),
+            executed_at: chrono::Utc::now(),
             train_time_ms: time,
             primary_metric_name: "Accuracy".to_string(),
             primary_metric_value: acc,
@@ -374,7 +373,7 @@ mod tests {
             dataset_id: "dataset-test".to_string(),
             task_type: "Regression".to_string(),
             algorithm: "Linear Regression".to_string(),
-            executed_at: Utc::now(),
+            executed_at: chrono::Utc::now(),
             train_time_ms: 10.0,
             primary_metric_name: "R2 Score".to_string(),
             primary_metric_value: 0.85,
