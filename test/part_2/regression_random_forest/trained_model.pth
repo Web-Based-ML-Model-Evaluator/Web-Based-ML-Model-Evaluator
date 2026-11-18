@@ -1,0 +1,76 @@
+{
+  "format": ".pth",
+  "architecture": "random_forest",
+  "task_type": "regression",
+  "target_column": "fair_market_resale_price_usd",
+  "input_features": [
+    "odometer_recorded_mileage",
+    "model_production_year",
+    "engine_displacement_liters",
+    "engine_rated_horsepower",
+    "certified_fuel_economy_mpg",
+    "documented_prior_owners",
+    "routine_maintenance_log_entries",
+    "tire_tread_remaining_depth_mm",
+    "nhtsa_crash_safety_score"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 1,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      -0.3433,
+      0.8109,
+      -0.4559,
+      -0.1091,
+      -0.5015,
+      -0.0999,
+      0.0488,
+      -0.2549,
+      -0.0843
+    ],
+    [
+      -0.341,
+      0.4208,
+      0.3111,
+      -0.2612,
+      0.2628,
+      -0.2342,
+      -0.652,
+      -0.6575,
+      0.224
+    ],
+    [
+      0.0599,
+      0.7806,
+      -0.4013,
+      0.4975,
+      0.1716,
+      -0.1865,
+      0.712,
+      -0.4366,
+      0.1096
+    ]
+  ],
+  "bias_vector": [
+    -0.1595,
+    -0.0106,
+    -0.0113
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0488,
+    "metric_score": 0.9266,
+    "metric_name": "r2_score"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained random_forest model for regression on used_vehicle_resale_appraisal_test.csv"
+}

@@ -11,7 +11,6 @@ import {
   Terminal,
 } from 'lucide-react';
 import { BackendApi, EvaluateResponse } from '../services/backendApi';
-import { createSampleFile } from '../services/sampleData';
 
 const SUPPORTED_EXTS = ['.PT', '.PTH', '.PT2', '.PTE', '.PTL', '.PKT', '.PKL', '.BIN', '.JSON', '.ONNX'];
 
@@ -26,18 +25,6 @@ export const EvaluateModelFlow: React.FC = () => {
   const [evaluating, setEvaluating] = useState<boolean>(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [evalResult, setEvalResult] = useState<EvaluateResponse | null>(null);
-
-  const createMockModelFile = (name: string, ext: string) => {
-    const content = JSON.stringify({
-      format: ext,
-      model_type: name,
-      exported_at: new Date().toISOString(),
-      layers: [4, 32, 3],
-      weights_status: 'compiled_rust_weights',
-    });
-    const blob = new Blob([content], { type: 'application/octet-stream' });
-    return new File([blob], `${name}${ext}`, { type: 'application/octet-stream' });
-  };
 
   const handleRunEvaluation = async () => {
     if (!modelFile || !datasetFile) {
@@ -127,47 +114,6 @@ export const EvaluateModelFlow: React.FC = () => {
               </div>
             )}
           </div>
-
-          {/* Quick Mock Models */}
-          <div>
-            <div className="font-mono text-[10px] text-gray-500 font-bold mb-1.5 uppercase">
-              // QUICK BENCHMARK MODEL ARTIFACT:
-            </div>
-            <div className="grid grid-cols-2 gap-2 font-mono text-xs">
-              <button
-                type="button"
-                onClick={() => setModelFile(createMockModelFile('logistic_regression', '.pkt'))}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>LOGISTIC REG</span>
-                <span className="text-[#FF5500]">.PKT</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModelFile(createMockModelFile('decision_tree', '.pt'))}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>DECISION TREE</span>
-                <span className="text-[#FF5500]">.PT</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModelFile(createMockModelFile('random_forest', '.pth'))}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>RANDOM FOREST</span>
-                <span className="text-[#FF5500]">.PTH</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setModelFile(createMockModelFile('linear_regressor', '.pt2'))}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>LINEAR REG</span>
-                <span className="text-[#FF5500]">.PT2</span>
-              </button>
-            </div>
-          </div>
         </div>
 
         {/* Test Dataset Upload */}
@@ -200,39 +146,6 @@ export const EvaluateModelFlow: React.FC = () => {
                 <div className="text-[10px] text-gray-500">CLICK TO BROWSE LOCAL CSV</div>
               </div>
             )}
-          </div>
-
-          {/* Quick Benchmark CSVs */}
-          <div>
-            <div className="font-mono text-[10px] text-gray-500 font-bold mb-1.5 uppercase">
-              // QUICK BENCHMARK TEST DATASET:
-            </div>
-            <div className="grid grid-cols-2 gap-2 font-mono text-xs">
-              <button
-                type="button"
-                onClick={() => {
-                  setDatasetFile(createSampleFile('iris'));
-                  setTaskType('classification');
-                  setTargetColumn('species');
-                }}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>IRIS TEST</span>
-                <span className="text-[#FF5500]">30 ROWS</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setDatasetFile(createSampleFile('housing'));
-                  setTaskType('regression');
-                  setTargetColumn('price');
-                }}
-                className="p-2 bg-[#FAF5ED] hover:bg-[#FFF2EB] border border-[#101010] flex justify-between items-center font-bold"
-              >
-                <span>HOUSING TEST</span>
-                <span className="text-[#FF5500]">25 ROWS</span>
-              </button>
-            </div>
           </div>
         </div>
       </div>

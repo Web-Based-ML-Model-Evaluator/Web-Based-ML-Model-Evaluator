@@ -1,0 +1,76 @@
+{
+  "format": ".onnx",
+  "architecture": "neural_network_mlp",
+  "task_type": "regression",
+  "target_column": "fuel_burn_rate_kg_per_hour",
+  "input_features": [
+    "flight_mach_number",
+    "cruise_altitude_geopotential_feet",
+    "compressor_inlet_stagnation_temp_k",
+    "turbine_inlet_total_temp_k",
+    "engine_bypass_air_ratio",
+    "fan_spool_rotational_speed_pct",
+    "high_pressure_core_pressure_ratio",
+    "aerodynamic_angle_of_attack_deg",
+    "net_engine_thrust_kn"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 1,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      0.2752,
+      0.2952,
+      0.6927,
+      0.2164,
+      -0.3676,
+      -0.5163,
+      0.177,
+      -0.1168,
+      -0.1275
+    ],
+    [
+      0.6456,
+      0.6297,
+      0.0988,
+      0.4397,
+      -0.0016,
+      0.7766,
+      -0.8327,
+      0.66,
+      -0.4129
+    ],
+    [
+      0.7987,
+      0.0947,
+      -0.0235,
+      0.6626,
+      0.5583,
+      -0.1981,
+      0.2952,
+      -0.4633,
+      -0.0206
+    ]
+  ],
+  "bias_vector": [
+    0.126,
+    -0.2058,
+    -0.1043
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.025,
+    "metric_score": 0.9775,
+    "metric_name": "r2_score"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained neural_network_mlp model for regression on turbofan_jet_engine_fuel_burn_test.csv"
+}

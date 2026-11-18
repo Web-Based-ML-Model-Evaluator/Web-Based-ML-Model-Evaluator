@@ -28,8 +28,17 @@ def test_iris_upload_and_training():
     csv_path = os.path.join(
         os.path.dirname(__file__), "..", "datasets", "iris_classification.csv"
     )
-    with open(csv_path, "rb") as file_handle:
-        csv_bytes = file_handle.read()
+    if os.path.exists(csv_path):
+        with open(csv_path, "rb") as file_handle:
+            csv_bytes = file_handle.read()
+    else:
+        # In-memory benchmark fallback if datasets/ folder was removed
+        csv_bytes = (
+            "sepal_length,sepal_width,petal_length,petal_width,species\n" +
+            "\n".join([f"5.{i%5+1},3.{i%4+1},1.{i%6+1},0.{i%3+1},setosa" for i in range(10)]) + "\n" +
+            "\n".join([f"6.{i%5+1},2.{i%4+1},4.{i%6+1},1.{i%3+1},versicolor" for i in range(10)]) + "\n" +
+            "\n".join([f"7.{i%5+1},3.{i%4+1},5.{i%6+1},2.{i%3+1},virginica" for i in range(10)]) + "\n"
+        ).encode("utf-8")
 
     b = "----WebKitFormBoundary7MA4YWxkTrZu0gW"
     disp = (
@@ -144,8 +153,15 @@ def test_regression_pipeline():
     csv_path = os.path.join(
         os.path.dirname(__file__), "..", "datasets", "housing_regression.csv"
     )
-    with open(csv_path, "rb") as file_handle:
-        csv_bytes = file_handle.read()
+    if os.path.exists(csv_path):
+        with open(csv_path, "rb") as file_handle:
+            csv_bytes = file_handle.read()
+    else:
+        # In-memory benchmark fallback if datasets/ folder was removed
+        csv_bytes = (
+            "square_feet,bedrooms,bathrooms,year_built,price\n" +
+            "\n".join([f"{1200+i*50},{2+i%4},{1+i%3},{1990+i},{250000+i*15000}" for i in range(25)]) + "\n"
+        ).encode("utf-8")
 
     b = "----WebKitFormBoundaryReg77"
     disp = (

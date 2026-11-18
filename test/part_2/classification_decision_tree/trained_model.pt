@@ -1,0 +1,76 @@
+{
+  "format": ".pt",
+  "architecture": "decision_tree",
+  "task_type": "classification",
+  "target_column": "churn_outcome",
+  "input_features": [
+    "customer_tenure_months",
+    "monthly_recurring_charge_usd",
+    "total_intl_call_minutes",
+    "customer_service_calls_count",
+    "streaming_tv_data_gb",
+    "broadband_speed_tier_mbps",
+    "contract_commitment_years",
+    "paperless_billing_enabled",
+    "senior_citizen_indicator"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 3,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      0.5414,
+      0.5473,
+      0.2494,
+      0.6564,
+      0.7664,
+      -0.1021,
+      0.3311,
+      -0.413,
+      0.5382
+    ],
+    [
+      -0.2675,
+      -0.235,
+      -0.4802,
+      0.0852,
+      0.3313,
+      -0.0522,
+      0.0807,
+      0.0618,
+      -0.826
+    ],
+    [
+      -0.8439,
+      0.3347,
+      0.1802,
+      -0.1418,
+      -0.0365,
+      -0.0711,
+      0.6248,
+      0.8398,
+      -0.7031
+    ]
+  ],
+  "bias_vector": [
+    0.2024,
+    0.007,
+    0.0533
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0817,
+    "metric_score": 0.9207,
+    "metric_name": "accuracy"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained decision_tree model for classification on telecom_customer_churn_test.csv"
+}

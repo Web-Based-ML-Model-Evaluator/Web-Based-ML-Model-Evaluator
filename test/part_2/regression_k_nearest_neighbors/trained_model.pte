@@ -1,0 +1,76 @@
+{
+  "format": ".pte",
+  "architecture": "k_nearest_neighbors",
+  "task_type": "regression",
+  "target_column": "particulate_matter_pm25_index",
+  "input_features": [
+    "nitrogen_dioxide_concentration_ppb",
+    "sulfur_dioxide_concentration_ppb",
+    "ground_level_ozone_ppm",
+    "carbon_monoxide_concentration_ppm",
+    "surface_temperature_celsius",
+    "wind_velocity_meters_sec",
+    "urban_traffic_density_index",
+    "ambient_humidity_percentage",
+    "atmospheric_boundary_layer_height_m"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 1,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      0.2963,
+      0.2393,
+      0.4128,
+      0.4926,
+      0.2257,
+      0.4368,
+      -0.8298,
+      -0.0062,
+      0.1677
+    ],
+    [
+      0.3127,
+      0.2363,
+      0.0604,
+      0.1302,
+      0.3137,
+      -0.3039,
+      0.4211,
+      -0.759,
+      0.0976
+    ],
+    [
+      0.4521,
+      -0.4634,
+      -0.8267,
+      -0.669,
+      0.2953,
+      0.2278,
+      0.7937,
+      0.2358,
+      -0.0196
+    ]
+  ],
+  "bias_vector": [
+    0.1689,
+    -0.1298,
+    -0.1163
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0306,
+    "metric_score": 0.979,
+    "metric_name": "r2_score"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained k_nearest_neighbors model for regression on urban_air_pollution_index_test.csv"
+}

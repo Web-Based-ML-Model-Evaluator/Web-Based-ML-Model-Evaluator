@@ -1,0 +1,77 @@
+// WEB_ML_MODEL_V2:logistic_regression:regression
+{
+  "format": ".pkt",
+  "architecture": "logistic_regression",
+  "task_type": "regression",
+  "target_column": "conversion_propensity_score",
+  "input_features": [
+    "cumulative_banner_impressions",
+    "historical_clickthrough_rate",
+    "page_dwell_time_seconds",
+    "user_session_frequency",
+    "viewport_ad_coverage_ratio",
+    "scroll_progression_depth_pct",
+    "publisher_traffic_reputation",
+    "recency_since_last_click_hrs",
+    "bid_cost_cpm_usd"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 1,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      0.7249,
+      0.3603,
+      0.086,
+      0.0835,
+      0.754,
+      -0.5815,
+      0.4392,
+      0.1323,
+      -0.1242
+    ],
+    [
+      0.5991,
+      -0.1214,
+      -0.4763,
+      -0.5714,
+      -0.8203,
+      0.2497,
+      -0.47,
+      0.4664,
+      0.0056
+    ],
+    [
+      0.8278,
+      -0.2119,
+      -0.1351,
+      -0.8484,
+      0.239,
+      0.1348,
+      0.3341,
+      -0.2592,
+      0.2709
+    ]
+  ],
+  "bias_vector": [
+    -0.087,
+    0.1528,
+    0.1695
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0743,
+    "metric_score": 0.9512,
+    "metric_name": "r2_score"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained logistic_regression model for regression on ad_click_conversion_propensity_test.csv"
+}

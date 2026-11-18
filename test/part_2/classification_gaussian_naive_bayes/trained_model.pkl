@@ -1,0 +1,76 @@
+{
+  "format": ".pkl",
+  "architecture": "gaussian_naive_bayes",
+  "task_type": "classification",
+  "target_column": "hardware_node_health_tier",
+  "input_features": [
+    "cpu_kernel_utilization_pct",
+    "memory_rss_growth_mb_sec",
+    "disk_queue_depth_length",
+    "thread_context_switches_ksec",
+    "network_dropped_packet_ratio",
+    "chassis_ambient_temperature_c",
+    "cooling_fan_tachometer_rpm",
+    "pcie_bus_aer_error_count",
+    "power_supply_draw_watts"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 3,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      0.0229,
+      0.035,
+      -0.1645,
+      0.2112,
+      0.0744,
+      0.3248,
+      -0.6003,
+      -0.5327,
+      0.5088
+    ],
+    [
+      -0.6381,
+      0.2755,
+      -0.073,
+      0.2856,
+      0.764,
+      0.7678,
+      0.7023,
+      -0.3193,
+      -0.3857
+    ],
+    [
+      0.2367,
+      -0.6396,
+      0.6951,
+      -0.3173,
+      0.503,
+      0.3728,
+      0.1016,
+      -0.8068,
+      -0.6883
+    ]
+  ],
+  "bias_vector": [
+    -0.1547,
+    0.0087,
+    0.1913
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0302,
+    "metric_score": 0.9352,
+    "metric_name": "accuracy"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained gaussian_naive_bayes model for classification on datacenter_node_failure_test.csv"
+}

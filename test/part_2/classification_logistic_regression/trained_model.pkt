@@ -1,0 +1,77 @@
+// WEB_ML_MODEL_V2:logistic_regression:classification
+{
+  "format": ".pkt",
+  "architecture": "logistic_regression",
+  "task_type": "classification",
+  "target_column": "loan_default_status",
+  "input_features": [
+    "applicant_credit_score",
+    "annual_base_income_usd",
+    "debt_to_income_ratio_pct",
+    "revolving_credit_balance_usd",
+    "recent_inquiries_count",
+    "employment_history_years",
+    "home_ownership_tier",
+    "active_credit_lines_count",
+    "requested_loan_amount_usd"
+  ],
+  "input_dimension": 9,
+  "output_dimension": 3,
+  "hyperparameters": {
+    "learning_rate": 0.001,
+    "max_depth": 8,
+    "n_estimators": 100,
+    "regularization_c": 1.0,
+    "kernel": "default",
+    "activation": "relu"
+  },
+  "weights_matrix": [
+    [
+      -0.4718,
+      0.6083,
+      0.7435,
+      -0.3986,
+      0.201,
+      0.1371,
+      0.7159,
+      0.0429,
+      -0.8437
+    ],
+    [
+      0.7524,
+      -0.4302,
+      -0.6689,
+      -0.4611,
+      0.4212,
+      0.8481,
+      -0.3588,
+      -0.5341,
+      0.2211
+    ],
+    [
+      0.7879,
+      -0.7296,
+      0.5669,
+      -0.8212,
+      -0.5647,
+      0.4404,
+      -0.0834,
+      -0.4526,
+      -0.7389
+    ]
+  ],
+  "bias_vector": [
+    0.073,
+    -0.2273,
+    -0.0055
+  ],
+  "training_metrics": {
+    "epochs_completed": 50,
+    "final_loss": 0.0814,
+    "metric_score": 0.9269,
+    "metric_name": "accuracy"
+  },
+  "exported_at": "2026-11-19T02:00:00Z",
+  "framework": "PyTorch / WebML Rust Engine Universal Checkpoint",
+  "description": "Pre-trained logistic_regression model for classification on credit_loan_underwriting_test.csv"
+}
