@@ -514,4 +514,52 @@ mod tests {
 
         assert!(result.is_valid, "{:?}", result.errors);
     }
+
+    // Clustering feature validation tests.
+
+    #[test]
+    fn accepts_numeric_clustering_features() {
+        let config = TaskConfiguration {
+            dataset_id: "test-dataset".to_string(),
+            task_type: TaskType::Clustering,
+            algorithm: "K-Means Clustering".to_string(),
+            target_column: None,
+            feature_columns: vec!["feature1".to_string()],
+            test_split_ratio: None,
+            num_clusters: Some(3),
+            random_seed: None,
+        };
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn rejects_categorical_clustering_features() {
+        let config = TaskConfiguration {
+            dataset_id: "test-dataset".to_string(),
+            task_type: TaskType::Clustering,
+            algorithm: "K-Means Clustering".to_string(),
+            target_column: None,
+            feature_columns: vec!["feature1".to_string()],
+            test_split_ratio: None,
+            num_clusters: Some(3),
+            random_seed: None,
+        };
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|error| {
+            error.contains("feature1") && error.contains("must be numeric")
+        }));
+    }
+
 }
