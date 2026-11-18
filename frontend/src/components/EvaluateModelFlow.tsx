@@ -2,13 +2,8 @@ import React, { useState } from 'react';
 import {
   FileCode,
   FileSpreadsheet,
-  Check,
   AlertCircle,
   Play,
-  RotateCcw,
-  Sparkles,
-  Download,
-  Terminal,
 } from 'lucide-react';
 import { BackendApi, EvaluateResponse } from '../services/backendApi';
 
