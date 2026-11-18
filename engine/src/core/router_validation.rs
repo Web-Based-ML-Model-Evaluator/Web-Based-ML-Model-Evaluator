@@ -90,6 +90,8 @@ pub fn validate_task_config(
                             }
                         }
                     }
+
+                    // Classification supports both numeric and categorical targets.
                 }
             }
         }
@@ -424,5 +426,43 @@ mod tests {
         assert!(result.errors.iter().any(|error| {
             error.contains("target") && error.contains("must be numeric")
         }));
+    }
+
+    // Classification supports both numeric and categorical targets.
+
+    #[test]
+    fn accepts_categorical_classification_target() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn accepts_numeric_classification_target() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
     }
 }
