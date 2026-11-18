@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ApiClient } from '../services/api';
 import { InfoTooltip } from './InfoTooltip';
 
@@ -33,7 +33,11 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluationResult, setEvaluationResult] = useState<any | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [showDetailedMatrix, setShowDetailedMatrix] = useState(false);
+  const evaluationInProgress = useRef(false);
+  const modelUploadInProgress = useRef(false);
+  const datasetUploadInProgress = useRef(false);
 
   // Load existing ingested models on mount
   useEffect(() => {
@@ -51,9 +55,13 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
   const handleModelFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (modelUploadInProgress.current) return;
+    modelUploadInProgress.current = true;
     setModelFile(file);
     setIsUploadingModel(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setEvaluationResult(null);
 
     try {
       const res = await ApiClient.uploadModel(file, taskType);
@@ -61,6 +69,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
     } catch (err: any) {
       setErrorMessage(`Model upload failed: ${err.message}`);
     } finally {
+      modelUploadInProgress.current = false;
       setIsUploadingModel(false);
     }
   };
@@ -69,9 +78,13 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
   const handleDatasetFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (datasetUploadInProgress.current) return;
+    datasetUploadInProgress.current = true;
     setTestFile(file);
     setIsUploadingDataset(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setEvaluationResult(null);
 
     try {
       const uploadRes = await ApiClient.uploadDataset(file);
@@ -89,14 +102,19 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
     } catch (err: any) {
       setErrorMessage(`Dataset upload failed: ${err.message}`);
     } finally {
+      datasetUploadInProgress.current = false;
       setIsUploadingDataset(false);
     }
   };
 
   // Run Evaluation
   const handleRunEvaluation = async () => {
+    if (evaluationInProgress.current) return;
+    evaluationInProgress.current = true;
     setIsEvaluating(true);
     setErrorMessage(null);
+    setSuccessMessage(null);
+    setEvaluationResult(null);
 
     try {
       // Both inputs are required: results only ever come from the user's own model and data
@@ -121,9 +139,11 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
         numericColumns.filter((c) => c !== targetColumn)
       );
       setEvaluationResult(res);
+      setSuccessMessage('Evaluation completed using the uploaded ONNX model and test dataset.');
     } catch (err: any) {
       setErrorMessage(`Evaluation failed: ${err.message}`);
     } finally {
+      evaluationInProgress.current = false;
       setIsEvaluating(false);
     }
   };
@@ -190,6 +210,23 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
           }}
         >
           ⚠ {errorMessage}
+        </div>
+      )}
+      {successMessage && (
+        <div
+          role="status"
+          style={{
+            padding: '12px 18px',
+            backgroundColor: '#F0FDF4',
+            border: '1px solid #BBF7D0',
+            borderRadius: '12px',
+            color: '#166534',
+            fontSize: '14px',
+            fontWeight: 500,
+            marginBottom: '24px',
+          }}
+        >
+          ✓ {successMessage}
         </div>
       )}
 
@@ -464,7 +501,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
         <button
           type="button"
           onClick={handleRunEvaluation}
-          disabled={isEvaluating}
+          disabled={isEvaluating || isUploadingModel || isUploadingDataset || !uploadedModel || !activeTestDatasetId || !targetColumn}
           style={{
             padding: '14px 44px',
             backgroundColor: '#D45A1E',
@@ -473,7 +510,7 @@ export const SimpleEvaluateModelView: React.FC<SimpleEvaluateModelViewProps> = (
             fontWeight: 700,
             borderRadius: '30px',
             border: 'none',
-            cursor: isEvaluating ? 'not-allowed' : 'pointer',
+            cursor: isEvaluating || isUploadingModel || isUploadingDataset ? 'not-allowed' : 'pointer',
             boxShadow: '0 4px 14px rgba(212, 90, 30, 0.35)',
             display: 'inline-flex',
             alignItems: 'center',
