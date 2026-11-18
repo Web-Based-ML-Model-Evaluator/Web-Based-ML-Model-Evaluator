@@ -55,6 +55,15 @@ function startWorker(): Worker {
     );
     restartWorker();
   };
+  w.onmessageerror = () => {
+    failAll(
+      new EngineError({
+        code: 'ENGINE_RESPONSE_FAILED',
+        message: 'The ML engine returned an unreadable response. Refresh the page and try again.',
+      }),
+    );
+    restartWorker();
+  };
   return w;
 }
 
@@ -65,6 +74,9 @@ function restartWorker() {
 
 /** Calls an engine method; rejects with an EngineError on failure. */
 export function callEngine<T>(method: string, args?: unknown, bytes?: Uint8Array): Promise<T> {
+  if (!method.trim()) {
+    return Promise.reject(new EngineError({ code: 'INVALID_REQUEST', message: 'An engine method is required.' }));
+  }
   if (!worker) worker = startWorker();
   const id = nextId++;
   const request: WorkerRequest = { id, method, args, bytes };
