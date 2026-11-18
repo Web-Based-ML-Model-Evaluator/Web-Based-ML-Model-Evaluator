@@ -93,6 +93,14 @@ export const ApiClient = {
     return callEngine('schema', { dataset_id: datasetId });
   },
 
+  getCleanedData(datasetId: string): Promise<any> {
+    return callEngine('cleaned_data', { dataset_id: datasetId });
+  },
+
+  purgeDataset(datasetId: string): Promise<any> {
+    return callEngine('purge_dataset', { dataset_id: datasetId });
+  },
+
   // Task routing (FR-4 to FR-7)
   listTasks(): Promise<TaskSupportInfo[]> {
     return callEngine('list_tasks');
