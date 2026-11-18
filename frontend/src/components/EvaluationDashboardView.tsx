@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { ApiClient } from '../services/api';
 import { InfoTooltip } from './InfoTooltip';
 
@@ -179,6 +179,8 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   const [selectedModelId, setSelectedModelId] = useState<string>('');
   const [evaluatingIngested, setEvaluatingIngested] = useState<boolean>(false);
   const [ingestedEvalResult, setIngestedEvalResult] = useState<any | null>(null);
+  const evaluationInProgress = useRef(false);
+  const modelUploadInProgress = useRef(false);
 
   useEffect(() => {
     ApiClient.listIngestedModels()
@@ -213,6 +215,8 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       setError('Please select an ONNX model file (.onnx) first.');
       return;
     }
+    if (modelUploadInProgress.current) return;
+    modelUploadInProgress.current = true;
     setIngesting(true);
     setError(null);
     setIngestSuccess(null);
@@ -227,11 +231,13 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     } catch (err: any) {
       setError(`Model upload failed: ${err.message}`);
     } finally {
+      modelUploadInProgress.current = false;
       setIngesting(false);
     }
   };
 
   const handleEvaluateIngestedModel = async () => {
+    if (evaluationInProgress.current) return;
     if (!selectedModelId) {
       setError('Please select an ingested model to evaluate.');
       return;
@@ -240,11 +246,21 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
       setError('Upload a dataset in Step 1 and choose its target column first.');
       return;
     }
+    if (ingestFeatures.length === 0) {
+      setError('Choose at least one numeric feature column for the ONNX model input.');
+      return;
+    }
+    evaluationInProgress.current = true;
     setEvaluatingIngested(true);
     setError(null);
+    setIngestSuccess(null);
+    setIngestedEvalResult(null);
     try {
       const res = await ApiClient.evaluateIngestedModel(selectedModelId, datasetId, ingestTarget, ingestFeatures);
       setIngestedEvalResult(res);
+      setIngestSuccess(
+        `Evaluation completed on ${res.test_samples} test rows using ${ingestedModels.find((m) => m.model_id === selectedModelId)?.filename ?? 'the selected ONNX model'}.`,
+      );
       if (res.comparison_entry) {
         setComparisonRuns((prev) => [res.comparison_entry, ...prev]);
         setSelectedExecutionIds((prev) => [res.comparison_entry.execution_id, ...prev]);
@@ -252,6 +268,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     } catch (err: any) {
       setError(`Ingested model evaluation failed: ${err.message}`);
     } finally {
+      evaluationInProgress.current = false;
       setEvaluatingIngested(false);
     }
   };
@@ -1810,7 +1827,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                 <button
                   type="button"
                   onClick={handleEvaluateIngestedModel}
-                  disabled={evaluatingIngested || !selectedModelId}
+                  disabled={evaluatingIngested || !selectedModelId || !ingestTarget || ingestFeatures.length === 0}
                   style={{
                     width: '100%',
                     padding: '10px 20px',
