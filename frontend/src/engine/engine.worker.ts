@@ -10,10 +10,15 @@ import init, { Engine } from './pkg/ml_engine.js';
 import { getModel, listModels, loadModel, ModelError, predict, releaseAll } from './onnx';
 import type { WorkerReply, WorkerRequest } from './protocol';
 
+class EngineLoadError extends Error {}
 let engine: Engine | null = null;
-const ready = init().then(() => {
-  engine = new Engine();
-});
+const ready = init()
+  .then(() => {
+    engine = new Engine();
+  })
+  .catch((error) => {
+    throw new EngineLoadError(String(error?.message ?? error));
+  });
 
 /** Calls the Rust engine; throws its structured error string on failure. */
 function callRust<T>(method: string, args: unknown, bytes?: Uint8Array): T {
@@ -65,11 +70,37 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   let reply: WorkerReply;
   try {
     await ready;
+    if (!engine) throw new EngineLoadError('The WebAssembly ML engine did not initialize.');
     reply = { id, ok: true, result: await handle(method, args, bytes) };
   } catch (thrown) {
     if (typeof thrown === 'string') {
       // A structured engine error (FR-13), e.g. {"error":{"code":"DATASET_NOT_FOUND",...}}
-      reply = { id, ok: false, error: JSON.parse(thrown).error, fatal: false };
+      try {
+        const parsed = JSON.parse(thrown);
+        reply = {
+          id,
+          ok: false,
+          error: parsed?.error ?? { code: 'ENGINE_ERROR', message: 'The ML engine returned an invalid error.' },
+          fatal: false,
+        };
+      } catch {
+        reply = {
+          id,
+          ok: false,
+          error: { code: 'ENGINE_ERROR', message: 'The ML engine returned an unreadable error.' },
+          fatal: false,
+        };
+      }
+    } else if (thrown instanceof EngineLoadError) {
+      reply = {
+        id,
+        ok: false,
+        fatal: true,
+        error: {
+          code: 'ENGINE_LOAD_FAILED',
+          message: 'The WebAssembly ML engine could not initialize in this browser.',
+        },
+      };
     } else if (thrown instanceof ModelError) {
       reply = { id, ok: false, error: { code: thrown.code, message: thrown.message }, fatal: false };
     } else if (!(thrown instanceof WebAssembly.RuntimeError)) {
