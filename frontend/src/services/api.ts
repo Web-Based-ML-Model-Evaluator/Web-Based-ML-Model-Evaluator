@@ -121,8 +121,8 @@ export const ApiClient = {
   },
 
   // Comparison (FR-12)
-  comparisonHistory(datasetId?: string): Promise<{ runs: any[]; total_runs: number }> {
-    return callEngine('comparison_history', { dataset_id: datasetId || 'all' });
+  comparisonHistory(datasetId = 'all'): Promise<{ dataset_id: string; runs: ModelComparisonEntry[]; total_runs: number }> {
+    return callEngine('comparison_history', { dataset_id: datasetId });
   },
 
   compareModels(executionIds: string[]): Promise<any> {
@@ -177,6 +177,18 @@ export interface UploadedModel {
   input_shape: Array<number | null> | null;
   output_names: string[];
   execution_provider: 'webgpu' | 'wasm';
+}
+
+export interface ModelComparisonEntry {
+  execution_id: string;
+  dataset_id: string;
+  task_type: string;
+  algorithm: string;
+  executed_at: string;
+  train_time_ms: number;
+  primary_metric_name: string;
+  primary_metric_value: number;
+  summary_metrics: Record<string, number>;
 }
 
 /**

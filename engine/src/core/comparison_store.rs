@@ -58,7 +58,9 @@ impl ComparisonStore {
             return all;
         }
 
-        map.get(dataset_id).cloned().unwrap_or_default()
+        let mut runs = map.get(dataset_id).cloned().unwrap_or_default();
+        runs.sort_by(|a, b| b.executed_at.cmp(&a.executed_at));
+        runs
     }
 
     /// Retrieves all model runs across all sessions, sorted with most recent first
@@ -349,6 +351,26 @@ mod tests {
         let runs = store.get_history("dataset-test");
         assert_eq!(runs.len(), 1);
         assert_eq!(runs[0].algorithm, "Random Forest Classifier");
+    }
+
+    #[test]
+    fn test_dataset_history_is_newest_first() {
+        let store = ComparisonStore::default();
+        let mut older = sample_clf_entry("run-older", "Older", 0.8, 0.8, 10.0);
+        older.executed_at = chrono::DateTime::parse_from_rfc3339("2024-01-01T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+        let mut newer = sample_clf_entry("run-newer", "Newer", 0.9, 0.9, 10.0);
+        newer.executed_at = chrono::DateTime::parse_from_rfc3339("2024-01-02T00:00:00Z")
+            .unwrap()
+            .with_timezone(&chrono::Utc);
+
+        store.record_run(older);
+        store.record_run(newer);
+
+        let history = store.get_history("dataset-test");
+        assert_eq!(history[0].execution_id, "run-newer");
+        assert_eq!(history[1].execution_id, "run-older");
     }
 
     #[test]

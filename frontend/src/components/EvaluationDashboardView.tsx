@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { ApiClient } from '../services/api';
+import { ApiClient, ModelComparisonEntry } from '../services/api';
 import { InfoTooltip } from './InfoTooltip';
 
 // ============================================================================
@@ -14,18 +14,6 @@ export interface RegressionMetrics {
   mean_squared_error: number;
   root_mean_squared_error: number;
   r2_score: number;
-}
-
-export interface ModelComparisonEntry {
-  execution_id: string;
-  dataset_id: string;
-  task_type: string;
-  algorithm: string;
-  executed_at: string;
-  train_time_ms: number;
-  primary_metric_name: string;
-  primary_metric_value: number;
-  summary_metrics: Record<string, number>;
 }
 
 export interface ModelRankEntry {
@@ -165,6 +153,7 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
   const [taskFilter, setTaskFilter] = useState<'All' | 'Classification' | 'Regression' | 'Clustering'>('All');
+  const historyRequestId = useRef(0);
 
   // Model Ingestion State (Issues #31, #32, #33)
   const [ingestedModels, setIngestedModels] = useState<any[]>([]);
@@ -273,18 +262,27 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
     }
   };
 
-  // Fetch the runs executed in this session (FR-12). An empty list stays empty.
+  // Reload real session history; ignore responses from stale or overlapping requests.
   const fetchComparisonRuns = useCallback(async () => {
+    const requestId = ++historyRequestId.current;
     setLoading(true);
     setError(null);
     try {
       const data = await ApiClient.comparisonHistory(historyKey);
-      setComparisonRuns((data.runs as ModelComparisonEntry[]) || []);
+      if (requestId !== historyRequestId.current) return;
+      const runs = data.runs;
+      if (!Array.isArray(runs) || runs.some((run) => !run.execution_id || !run.executed_at)) {
+        throw new Error('The run history response has an invalid format.');
+      }
+      setComparisonRuns(runs);
+      setSelectedExecutionIds((selected) => selected.filter((id) => runs.some((run) => run.execution_id === id)));
     } catch (err: any) {
+      if (requestId !== historyRequestId.current) return;
       setError(`Could not load the model history (${err.message}).`);
       setComparisonRuns([]);
+      setSelectedExecutionIds([]);
     } finally {
-      setLoading(false);
+      if (requestId === historyRequestId.current) setLoading(false);
     }
   }, [historyKey]);
 
@@ -1195,14 +1193,19 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                     <th style={{ padding: '10px 12px' }}>Task Type</th>
                     <th style={{ padding: '10px 12px' }}>Primary Metric</th>
                     <th style={{ padding: '10px 12px' }}>Latency</th>
+                    <th style={{ padding: '10px 12px' }}>Executed</th>
                     <th style={{ padding: '10px 12px' }}>Execution ID</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredRuns.length === 0 ? (
                     <tr>
-                      <td colSpan={6} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
-                        No trained model runs found for the selected filter. Train a model or switch filter.
+                      <td colSpan={7} style={{ padding: '24px', textAlign: 'center', color: '#94a3b8' }}>
+                        {loading
+                          ? 'Loading evaluation history...'
+                          : comparisonRuns.length === 0
+                          ? 'No evaluation runs yet. Train or evaluate a model to create the first run.'
+                          : 'No evaluation runs match the selected task filter.'}
                       </td>
                     </tr>
                   ) : (
@@ -1260,6 +1263,11 @@ export const EvaluationDashboardView: React.FC<EvaluationDashboardProps> = ({
                             {run.train_time_ms < 30000 && (
                               <span style={{ marginLeft: '4px', color: '#16a34a', fontSize: '11px' }}>✓ &lt;30s (NFR-1)</span>
                             )}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#64748b' }}>
+                            {Number.isNaN(Date.parse(run.executed_at))
+                              ? 'Unknown'
+                              : new Date(run.executed_at).toLocaleString()}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#94a3b8', fontFamily: 'monospace', fontSize: '12px' }}>
                             {run.execution_id}
