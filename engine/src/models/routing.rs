@@ -47,7 +47,6 @@ pub struct ValidationResult {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PipelineDispatchRequest {
     pub config: TaskConfiguration,
-    pub mock_mode: Option<bool>,
 }
 
 /// Pipeline dispatch response
