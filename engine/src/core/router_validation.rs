@@ -91,7 +91,7 @@ pub fn validate_task_config(
                         }
                     }
 
-                    // Classification supports both numeric and categorical targets.
+                    // Classification supports numeric and categorical targets.
                 }
             }
         }
@@ -142,8 +142,8 @@ pub fn validate_task_config(
         }
     }
 
-    // Validate that all selected feature columns are numeric.
-    // This applies to Classification, Regression, and Clustering.
+    // Validate selected feature columns.
+    // Missing type metadata is safely skipped.
     if let Some(types) = column_types {
         for feature in &config.feature_columns {
             if let Some(column_type) = types.get(feature) {
@@ -428,7 +428,7 @@ mod tests {
         }));
     }
 
-    // Classification supports both numeric and categorical targets.
+    // Classification target compatibility tests.
 
     #[test]
     fn accepts_categorical_classification_target() {
@@ -460,6 +460,55 @@ mod tests {
         let mut column_types = HashMap::new();
         column_types.insert("feature1".to_string(), "Numeric".to_string());
         column_types.insert("target".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    // Missing column-type metadata tests.
+
+    #[test]
+    fn handles_missing_column_types_without_panicking() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let result = validate_task_config(&config, None, None);
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn handles_missing_feature_type_without_panicking() {
+        let config = create_config(
+            TaskType::Classification,
+            "Random Forest Classifier",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let column_types = HashMap::new();
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn handles_missing_target_type_without_panicking() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
 
         let result = validate_task_config(&config, None, Some(&column_types));
 
