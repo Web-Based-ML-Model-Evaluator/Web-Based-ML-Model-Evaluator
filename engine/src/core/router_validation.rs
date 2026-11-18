@@ -76,6 +76,20 @@ pub fn validate_task_config(
                             ));
                         }
                     }
+
+                    // Regression requires a numeric target column.
+                    if config.task_type == TaskType::Regression {
+                        if let Some(types) = column_types {
+                            if let Some(target_type) = types.get(target) {
+                                if target_type != "Numeric" {
+                                    errors.push(format!(
+                                        "Regression target column '{}' must be numeric, but its inferred type is '{}'.",
+                                        target, target_type
+                                    ));
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -332,7 +346,7 @@ mod tests {
             .any(|e| e.contains("at least 2 clusters")));
     }
 
-    // Tests for numeric feature-column validation.
+    // Numeric feature validation tests.
 
     #[test]
     fn accepts_numeric_feature_columns() {
@@ -368,6 +382,47 @@ mod tests {
         assert!(!result.is_valid);
         assert!(result.errors.iter().any(|error| {
             error.contains("feature1") && error.contains("must be numeric")
+        }));
+    }
+
+    // Regression target validation tests.
+
+    #[test]
+    fn accepts_numeric_regression_target() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Numeric".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(result.is_valid, "{:?}", result.errors);
+    }
+
+    #[test]
+    fn rejects_categorical_regression_target() {
+        let config = create_config(
+            TaskType::Regression,
+            "Linear Regression",
+            Some("target"),
+            vec!["feature1"],
+        );
+
+        let mut column_types = HashMap::new();
+        column_types.insert("feature1".to_string(), "Numeric".to_string());
+        column_types.insert("target".to_string(), "Categorical".to_string());
+
+        let result = validate_task_config(&config, None, Some(&column_types));
+
+        assert!(!result.is_valid);
+        assert!(result.errors.iter().any(|error| {
+            error.contains("target") && error.contains("must be numeric")
         }));
     }
 }
